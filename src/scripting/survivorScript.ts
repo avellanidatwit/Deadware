@@ -67,10 +67,12 @@ type ComparisonOperator =
   | "!=";
 
 type Condition =
+  | { type: "and"; conditions: Condition[] }
   | { type: "nearbydoor" }
   | { type: "inventoryFull" }
+  | { type: "inventorySpace" }
   | { type: "itemsOnFloor" }
-  | { type: "containerNearby" }
+  | { type: "containerNearby"; range?: number }
   | { type: "survivorNearby"; range?: number }
   | {
       type: "zombieNearby";
@@ -184,11 +186,12 @@ export function parseSurvivorScript(
       actionLine.lineNumber
     );
 
-    if (actor === "zombie" && (action.type === "openDoor" || condition.type === "nearbydoor")) {
+    const conditions = condition.type === "and" ? condition.conditions : [condition];
+    if (actor === "zombie" && (action.type === "openDoor" || conditions.some(part => part.type === "nearbydoor"))) {
       throw new SurvivorScriptError("Door commands require a survivor script.", currentLine.lineNumber);
     }
 
-    if (actor === "zombie" && (action.type === "moveToContainer" || action.type === "pickUpItems" || condition.type === "inventoryFull" || condition.type === "itemsOnFloor" || action.type === "searchContainer" || action.type === "lookFloor" || condition.type === "containerNearby")) {
+    if (actor === "zombie" && (action.type === "moveToContainer" || action.type === "pickUpItems" || conditions.some(part => part.type === "inventoryFull" || part.type === "inventorySpace") || conditions.some(part => part.type === "itemsOnFloor") || action.type === "searchContainer" || action.type === "lookFloor" || conditions.some(part => part.type === "containerNearby"))) {
       throw new SurvivorScriptError("Container and floor searches require a survivor script.", currentLine.lineNumber);
     }
     if (action.type === "attack" && action.target === actor) {
@@ -197,7 +200,7 @@ export function parseSurvivorScript(
     if (actor === "zombie" && action.type === "moveAway") {
       throw new SurvivorScriptError("Zombie actions: CHASE survivor, WANDER, EXPLORE, MOVE direction, or WAIT.", actionLine.lineNumber);
     }
-    if (actor === "survivor" && (action.type === "chase" || condition.type === "survivorNearby")) {
+    if (actor === "survivor" && (action.type === "chase" || conditions.some(part => part.type === "survivorNearby"))) {
       throw new SurvivorScriptError("CHASE survivor and survivorNearby require a zombie script.", currentLine.lineNumber);
     }
 
@@ -222,18 +225,23 @@ function parseCondition(
   text: string,
   lineNumber: number
 ): Condition {
+  if (/\bAND\b/.test(text)) {
+    const parts = text.split(/\bAND\b/).map(part => part.trim());
+    if (parts.some(part => !part)) throw new SurvivorScriptError("AND requires a condition on both sides.", lineNumber);
+    return { type: "and", conditions: parts.map(part => parseCondition(part, lineNumber)) };
+  }
   if (text === "nearbydoor") return { type: "nearbydoor" };
+  if (text === "inventorySpace") return { type: "inventorySpace" };
   if (text === "inventoryFull") return { type: "inventoryFull" };
   if (text === "itemsOnFloor") return { type: "itemsOnFloor" };
-  if (text === "containerNearby") return { type: "containerNearby" };
-  const nearbyMatch = text.match(/^(zombieNearby|survivorNearby)(?:\s+(.*))?$/);
+  const nearbyMatch = text.match(/^(zombieNearby|survivorNearby|containerNearby)(?:\s+(.*))?$/);
   if (nearbyMatch) {
     const value = nearbyMatch[2];
     const range = value === undefined ? undefined : Number(value);
     if (value !== undefined && (!/^\d+$/.test(value) || !Number.isSafeInteger(range))) {
       throw new SurvivorScriptError("Nearby range must be a nonnegative whole number, for example zombieNearby 10.", lineNumber);
     }
-    return { type: nearbyMatch[1] as "zombieNearby" | "survivorNearby", range };
+    return { type: nearbyMatch[1] as "zombieNearby" | "survivorNearby" | "containerNearby", range };
   }
 
   const healthMatch = text.match(
@@ -383,8 +391,10 @@ export function runSurvivorProgram(
       )
     ) {
       // Use the matched detection radius for this chase only, without changing the entity default.
-      if (rule.action.type === "chase" && rule.condition.type === "survivorNearby") {
-        return { ...rule.action, range: rule.condition.range ?? context.detectionRange ?? 5 };
+      const parts = rule.condition.type === "and" ? rule.condition.conditions : [rule.condition];
+      const sightRules = parts.filter(part => part.type === "survivorNearby");
+      if (rule.action.type === "chase" && sightRules.length > 0) {
+        return { ...rule.action, range: Math.min(...sightRules.map(part => part.range ?? context.detectionRange ?? 5)) };
       }
       return rule.action;
     }
@@ -404,14 +414,18 @@ function evaluateCondition(
   context: ScriptContext
 ): boolean {
   switch (condition.type) {
+    case "and":
+      return condition.conditions.every(part => evaluateCondition(part, context));
     case "nearbydoor":
       return "findNearbyDoors" in context.survivor && context.survivor.findNearbyDoors(context.grid).length > 0;
+    case "inventorySpace":
+      return "inventory" in context.survivor && context.survivor.inventory.length < context.survivor.inventoryCapacity;
     case "inventoryFull":
       return "inventory" in context.survivor && context.survivor.inventory.length >= context.survivor.inventoryCapacity;
     case "itemsOnFloor":
       return "lookAtFloor" in context.survivor && context.survivor.lookAtFloor(context.grid).length > 0;
     case "containerNearby":
-      return "findContainers" in context.survivor && context.survivor.findContainers(context.grid)
+      return "findContainers" in context.survivor && context.survivor.findContainers(context.grid, condition.range ?? 1)
         .some(container => container.contents.length > 0);
     case "always":
       return true;
@@ -443,7 +457,7 @@ function isZombieNearby(
   range = 5
 ): boolean {
   return searchTargets(context.grid, context.survivor, context.zombies, {
-    range,
+    range: "sightRange" in context.survivor ? Math.min(range, context.survivor.sightRange) : range,
     predicate: zombie => zombie.id !== context.survivor.id && zombie.isAlive(),
   }).length > 0;
 }

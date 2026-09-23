@@ -2,6 +2,7 @@ import type { Item } from "../entities/item.js";
 
 export type TileType =
   | "empty"
+  | "road"
   | "buildingWall"
   | "buildingFloor"
   | "door"
@@ -250,6 +251,7 @@ export class Grid {
 
         switch (cell.tileType) {
           case "empty":
+          case "road":
             line += ".";
             break;
 

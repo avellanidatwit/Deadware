@@ -8,6 +8,51 @@ export class Survivor implements GridEntity {
 
   public health = 100;
   public maxHealth = 100;
+  readonly sightRange = 8;
+  private exploredTiles = new Set<string>();
+  private visibleTiles = new Set<string>();
+  hasExplored(x: number, y: number): boolean { return this.exploredTiles.has(`${x},${y}`); }
+  canSee(x: number, y: number): boolean { return this.visibleTiles.has(`${x},${y}`); }
+
+  updateVision(grid: Grid): void {
+    this.visibleTiles.clear();
+    if (!this.isAlive()) return;
+    for (let y = Math.max(0, this.y - this.sightRange); y <= Math.min(grid.height - 1, this.y + this.sightRange); y++) {
+      for (let x = Math.max(0, this.x - this.sightRange); x <= Math.min(grid.width - 1, this.x + this.sightRange); x++) {
+        if (hasLineOfSight(grid, this, { x, y }, { range: this.sightRange })) {
+          this.visibleTiles.add(`${x},${y}`);
+          this.exploredTiles.add(`${x},${y}`);
+        }
+      }
+    }
+  }
+
+  /** Route across revealed terrain toward the nearest edge of unexplored space. */
+  explore(grid: Grid): boolean {
+    this.updateVision(grid);
+    if (!this.isAlive()) return false;
+    const offsets = [[0, -1], [0, 1], [1, 0], [-1, 0]];
+    const queue: { x: number; y: number; first?: { x: number; y: number } }[] = [{ x: this.x, y: this.y }];
+    const seen = new Set([`${this.x},${this.y}`]);
+    for (let index = 0; index < queue.length; index++) {
+      const current = queue[index];
+      const frontier = offsets.some(([dx, dy]) => grid.isValidPosition(current.x + dx, current.y + dy) &&
+        !this.hasExplored(current.x + dx, current.y + dy));
+      if (frontier && current.first) {
+        const moved = grid.moveEntity(this, current.first.x, current.first.y);
+        this.updateVision(grid);
+        return moved;
+      }
+      for (const [dx, dy] of offsets) {
+        const next = { x: current.x + dx, y: current.y + dy }, key = `${next.x},${next.y}`;
+        if (!seen.has(key) && this.hasExplored(next.x, next.y) && grid.isWalkable(next.x, next.y)) {
+          seen.add(key);
+          queue.push({ ...next, first: current.first ?? next });
+        }
+      }
+    }
+    return false;
+  }
 
   public program: string;
   readonly inventoryCapacity = 5;
@@ -85,7 +130,7 @@ export class Survivor implements GridEntity {
   }
 
   findContainers(grid: Grid, range = 1): ItemContainer[] {
-    return searchEntities(grid, this, { range, predicate: entity => entity instanceof ItemContainer })
+    return searchEntities(grid, this, { range: Math.min(range, this.sightRange), predicate: entity => entity instanceof ItemContainer })
       .filter((entity): entity is ItemContainer => entity instanceof ItemContainer);
   }
 

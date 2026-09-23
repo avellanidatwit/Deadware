@@ -48,7 +48,7 @@
   <body>
     <main>
       <h1>DEADWARE</h1>
-      <p>World simulation · 50 × 50 tiles</p>
+      <p id="world-size">World simulation</p>
       <div class="layout">
         <div class="world-column">
           <canvas id="world" role="img" aria-label="Simulation grid">Your browser needs canvas support to display the world.</canvas>
@@ -81,6 +81,10 @@
           <button id="stop" type="button">Stop</button>
           <button id="restart" type="button">Restart</button>
           <ul aria-label="Map legend">
+            <li><span class="swatch" style="background:#a38c70"></span>F ? Decorative furniture (not searchable)</li>
+            <li>Darkened tiles: unexplored</li>
+            <li><span class="swatch" style="background:#454b53"></span>Road</li>
+            <li><span class="swatch" style="background:#b594d6"></span>V ? Car body (C end is searchable)</li>
             <li><span class="swatch" style="background:#638271"></span>Open door</li>
             <li><span class="swatch" style="background:#b594d6"></span>C · Container</li>
             <li><span class="swatch" style="background:#f1d878"></span>* · Floor items</li>
@@ -91,7 +95,7 @@
             <li><span class="swatch" style="background:#39464f"></span>Building floor</li>
             <li><span class="swatch" style="background:#d4a653"></span>Closed door</li>
           </ul>
-          <p>The simulation runs until stopped. Pause to step through individual updates, Stop to cancel, or Restart to begin again.</p>
+          <p>Survivor sight: 8 tiles, blocked by walls and closed doors. Revealed terrain stays visible; entities require current sight. The simulation runs until stopped. Pause to step through individual updates, Stop to cancel, or Restart to begin again.</p>
         </aside>
       </div>
       <section id="command-reference" class="command-reference" aria-labelledby="commands-heading">
@@ -121,7 +125,7 @@ OTHERWISE
                 <tr><td><code>MOVE north</code><br><code>MOVE south</code><br><code>MOVE east</code><br><code>MOVE west</code></td><td>Move one tile in the chosen direction if walkable.</td></tr>
                 <tr><td><code>MOVE_AWAY zombie</code></td><td>Choose a walkable neighboring tile farthest from the nearest living zombie.</td></tr>
                 <tr><td><code>ATTACK zombie</code></td><td>Deal 25 damage to the nearest living zombie if within one tile.</td></tr>
-                <tr><td><code>EXPLORE</code><br><code>WANDER</code></td><td>Move to a random walkable neighboring tile.</td></tr>
+                <tr><td><code>EXPLORE</code><br><code>WANDER</code></td><td>Move toward unseen areas through revealed terrain (survivors); zombies wander randomly.</td></tr>
                 <tr><td><code>WAIT</code></td><td>Do nothing this update.</td></tr>
               </tbody>
             </table>
@@ -140,7 +144,7 @@ OTHERWISE
               <tbody>
                 <tr><td><code>MOVE north</code><br><code>MOVE south</code><br><code>MOVE east</code><br><code>MOVE west</code></td><td>Move one tile in the chosen direction if walkable.</td></tr>
                 <tr><td><code>CHASE survivor</code></td><td>Move toward the nearest visible living survivor in detection range, routing around walls. Stop adjacent; chasing does not attack. Wait if no target or route is available.</td></tr>
-                <tr><td><code>WANDER</code><br><code>EXPLORE</code></td><td>Move to a random walkable neighboring tile.</td></tr>
+                <tr><td><code>WANDER</code><br><code>EXPLORE</code></td><td>Move toward unseen areas through revealed terrain (survivors); zombies wander randomly.</td></tr>
                 <tr><td><code>WAIT</code></td><td>Do nothing this update.</td></tr>
               </tbody>
             </table>
@@ -156,6 +160,12 @@ OTHERWISE
           </section>
         </div>
         <h3>Conditions and rule syntax</h3>
+        <p>Combine conditions with uppercase <code>AND</code>. Every condition must match; actions still run one per update.</p>
+        <pre><code>WHEN zombieNearby 1 AND health &gt; 20
+    ATTACK zombie
+
+OTHERWISE
+    EXPLORE</code></pre>
         <p>Loot the nearest visible container and collect its items (wait if none is reachable within 10 tiles):</p>
         <pre><code>WHEN inventoryFull
     WAIT
@@ -168,7 +178,7 @@ WHEN containerNearby
 
 OTHERWISE
     MOVE_TO container 10</code></pre>
-        <p>Try searching the desk just below the starting survivor with this script (pause first to keep the survivor nearby):</p>
+        <p>Search an adjacent container or parked car with this script:</p>
         <pre><code>WHEN containerNearby
     SEARCH container
 
@@ -178,9 +188,10 @@ OTHERWISE
           <thead><tr><th scope="col">Syntax</th><th scope="col">Meaning</th></tr></thead>
           <tbody>
             <tr><td><code>WHEN nearbydoor</code></td><td>Survivor only: a closed door is one horizontal or vertical tile away. Open doors do not match.</td></tr>
+            <tr><td><code>WHEN inventorySpace</code></td><td>Survivor has room for at least one more item (fewer than five). Can be combined with AND.</td></tr>
             <tr><td><code>WHEN inventoryFull</code></td><td>Survivor is carrying five items.</td></tr>
             <tr><td><code>WHEN itemsOnFloor</code></td><td>There are items on the survivor's current tile.</td></tr>
-            <tr><td><code>WHEN containerNearby</code></td><td>Survivor only: a visible, nonempty container is within one tile.</td></tr>
+            <tr><td><code>WHEN containerNearby</code><br><code>WHEN containerNearby 10</code></td><td>Survivor only: a visible, nonempty container is within the specified range (default 1). SEARCH still requires adjacency; use MOVE_TO container 10 to approach.</td></tr>
             <tr><td><code>WHEN zombieNearby</code><br><code>WHEN zombieNearby 10</code></td><td>A visible living zombie is within the given number of tiles (default 5). Requires line of sight and excludes the observer.</td></tr>
             <tr><td><code>WHEN survivorNearby</code><br><code>WHEN survivorNearby 8</code></td><td>Zombie only: a visible living survivor is within the given range (default 5). CHASE uses this rule's range too.</td></tr>
             <tr><td><code>WHEN health &lt; 20</code></td><td>Compare the entity's own health with a nonnegative whole number. Operators: <code>&lt;</code>, <code>&gt;</code>, <code>&lt;=</code>, <code>&gt;=</code>, <code>==</code>, <code>!=</code>.</td></tr>

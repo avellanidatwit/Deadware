@@ -66,7 +66,7 @@ Both nearby script conditions and enemy targeting now require sight. Script eval
 
 ## Containers and floor items
 
-`ItemContainer` is a named storage entity (desk, cabinet, etc.) with food and weapon contents. It blocks movement but not sight. The demo includes a desk at (10, 11) and a cabinet at (22, 17), each with randomized loot. `randomizeItems(count)` creates food or weapons with equal probability; omitting the count generates 0?3 items. Loot is generated once per container, not replenished on search.
+`ItemContainer` is a named storage entity (desk, cabinet, etc.) with food and weapon contents. It blocks movement but not sight. The generated city includes parked cars and building storage with randomized loot. `randomizeItems(count)` creates food or weapons with equal probability; omitting the count generates 0?3 items. Loot is generated once per container, not replenished on search.
 
 ```text
 WHEN containerNearby
@@ -75,7 +75,7 @@ OTHERWISE
     LOOK floor
 ```
 
-`containerNearby` means a visible, nonempty container within one tile. `SEARCH container` searches an adjacent container (horizontal/vertical, not diagonal), preferring a nonempty one, and transfers its entire contents to the survivor's current floor tile. Repeat searches of an empty container produce nothing. `LOOK floor`, `LOOK floor food`, and `LOOK floor weapon` display matching items. The status panel always lists the items underfoot; floor piles are marked with `*` when not covered by an entity.
+`containerNearby` means a visible, nonempty container within one tile by default. Add a nonnegative whole-number range, for example `WHEN containerNearby 10`, to detect farther containers. Detection does not extend SEARCH reach; use `MOVE_TO container 10` to approach. `SEARCH container` searches an adjacent container (horizontal/vertical, not diagonal), preferring a nonempty one, and transfers its entire contents to the survivor's current floor tile. Repeat searches of an empty container produce nothing. `LOOK floor`, `LOOK floor food`, and `LOOK floor weapon` display matching items. The status panel always lists the items underfoot; floor piles are marked with `*` when not covered by an entity.
 
 The TypeScript API exposes `survivor.findContainers(grid, range)`, `survivor.searchContainer(grid, container)` (null if unavailable, an item array otherwise), and `survivor.lookAtFloor(grid, type?)`. The floor query returns a copied array suitable for `.find`, `.filter`, and `.some`, for example `survivor.lookAtFloor(grid).filter(item => item.type === "food")`. Items persist on their floor tile when the survivor moves. Survivors can pick up items into a five-item inventory. Eating and equipping items are not implemented yet.
 
@@ -120,3 +120,42 @@ Survivor movement actions (MOVE, MOVE_AWAY, MOVE_TO, EXPLORE, WANDER) run on tic
 Zombies now support `ATTACK survivor`: 20 damage per attack, within Manhattan distance 1 and line of sight. Their default script checks `WHEN survivorNearby 1` and attacks before chasing. At zero health a survivor stops acting and is removed from the grid. Attacking takes one update; it does not also move.
 
 On survivor movement cooldown ticks, movement rules are skipped and evaluation continues down the script to the first matching non-movement rule. This allows attacks, searches, pickups, and door opening while movement is unavailable. If no eligible rule matches, the survivor waits. Only one action executes per update.
+
+
+## Generated cities
+
+The starting world now uses `generateCity` from `src/world/city.ts`. Configure it in `src/main.ts`:
+
+```ts
+const city = generateCity({ width: 80, height: 60, seed: 123, carDensity: 0.025 });
+const { grid } = city;
+```
+
+Width and height default to 50, with supported integer sizes from 8 to 300. Omit `seed` for a new randomized city each restart; set it for repeatable layout and loot types. `carDensity` ranges from 0 to 1 and controls parking on eligible road tiles.
+
+Two-lane roads cross the map with randomized spacing and no perimeter road. Building lots have variable dimensions and occasional vacant spaces. Every generated building is at least 5 by 5 tiles, providing a minimum 3 by 3 interior inside the walls. Every building has a closed door and a driveway connected to the streets. Cars park on one lane, leaving the other lane and junctions clear. Cars are ordinary `ItemContainer` entities named Car, shown as a searchable C end and a non-searchable V body: both tiles block movement and work with container detection, navigation, searching, and food/weapon loot. Like other containers they do not block sight. Buildings may contain desks or cabinets where space permits.
+
+The return value contains `grid`, `buildings`, `cars`, interior `containers`, the generated `seed`, and clear `survivorSpawn`/`zombieSpawn` positions. The page's dimensions follow the generated grid. Run `npm run build` and refresh after editing the settings.
+
+
+`WHEN` supports uppercase `AND`, for example `WHEN zombieNearby 1 AND health > 20`. All conditions must match, and actor restrictions apply to every condition. An AND chase rule uses the smallest survivor detection range in that rule. OR and parentheses are not supported.
+
+Cars occupy two consecutive road tiles, vertically on north/south roads and horizontally on east/west roads. The default carDensity is 0.025 (2.5% of eligible parking positions). Only the C end stores loot and counts as a container; standing next to the V body alone does not allow searching. Cars are spaced to avoid overlapping each other, driveways, or intersections, and the other road lane remains clear. The road network crosses map edges where streets exit, but does not form a perimeter ring.
+
+`WHEN inventorySpace` is the opposite of `inventoryFull`: it matches when the survivor carries fewer than five items. For example, `WHEN itemsOnFloor AND inventorySpace` followed by `PICK_UP items`. This condition is survivor-only.
+
+
+## Exploration and sight
+
+Survivors have eight-tile Manhattan sight, blocked by walls and closed doors. The map darkens tiles never seen; revealed terrain stays bright, but entities and floor items are drawn only while currently visible. Vision updates initially and after each tick, including door opening. Death stops further discovery.
+
+Survivor EXPLORE (and its WANDER alias) routes over revealed walkable terrain to the nearest boundary of unseen space instead of choosing a random step. It stops when no reachable exploration frontier remains. Use `WHEN nearbydoor` / `OPEN door` to open up hidden interiors. Movement still happens every other tick. Zombie wandering stays random. Survivor enemy/container detection ranges are capped at eight tiles, even if a script requests more; smaller script ranges still work.
+
+
+## Furniture, building zombies, and item catalog
+
+Buildings contain searchable desks, cabinets, dressers, and bookshelves (C), plus decorative chairs, sofas, beds, and tables (F). Both block movement, but only storage furniture is searchable. Furniture sits along side walls with walking and door access kept clear.
+
+Each building independently has a 40% chance of spawning one zombie on a free interior tile. Configure `buildingZombieChance` in `generateCity` (0 disables interior zombies, 1 populates every building). The existing street zombie remains. Interior zombies run scripts and appear in the entity selector; they become visible on the map when the survivor sees them.
+
+Edit `src/data/itemCatalog.ts` to manage every inventory item definition. Each entry has a unique `key`, `name`, `type` (food or weapon), and relative loot `weight`. A weight of 0 excludes an item from random loot. Add more entries of either category to expand loot without changing the generator. `createItemByKey(key)` creates a specific item, and `randomizeItems` samples the catalog. Items keep unique instance IDs plus their catalog key. Food and weapons remain item categories; eating and equipping are not implemented.
