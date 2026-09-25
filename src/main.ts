@@ -1,4 +1,3 @@
-import { findNearestTarget } from "./world/perception.js";
 import { runZombieTick } from "./scripting/zombieScript.js";
 import { generateCity } from "./world/city.js";
 
@@ -6,10 +5,8 @@ import { Survivor } from "./entities/survivor.js";
 import { Zombie } from "./entities/zombie.js";
 
 import {
-  Direction,
   parseSurvivorScript,
-  runSurvivorProgram,
-  SurvivorAction,
+  runSurvivorTick as simulateSurvivorTick,
 } from "./scripting/survivorScript.js";
 
 // ======================================================
@@ -25,7 +22,16 @@ const { grid } = city;
 // ======================================================
 
 const survivorCode = 
-`WHEN zombieNearby 1
+`WHEN health < 40 AND hasItem bandage
+    USE bandage
+
+WHEN thirsty AND hasItem water
+    USE water
+
+WHEN hungry AND hasItem food
+    EAT food
+
+WHEN zombieNearby 1
     ATTACK zombie
     
 WHEN zombieNearby 6
@@ -140,6 +146,7 @@ document.querySelector("#apply-script")!.addEventListener("click", () => {
     else zombiePrograms.set(selectedEntity.id, program);
     scriptEditor.removeAttribute("aria-invalid");
     feedback.textContent = stopped ? "Script saved. Simulation is stopped." : "Script applied for the next update.";
+    feedback.textContent += ` Program Memory: ${program.memoryCost} units (${program.rules.length} rules; sandbox has no limit).`;
   } catch (error) {
     scriptEditor.setAttribute("aria-invalid", "true");
     feedback.textContent = error instanceof Error ? error.message : "Invalid script.";
@@ -201,7 +208,7 @@ function render(): void {
       ctx.fillRect(x * 16, y * 16, 16, 16);
     }
   }
-  stats.textContent = `Tick ${tick} | Position (${survivor.x}, ${survivor.y}) | Health ${survivor.health}/${survivor.maxHealth}`;
+  stats.textContent = `Tick ${tick} | Position (${survivor.x}, ${survivor.y}) | Health ${survivor.health}/${survivor.maxHealth} | Hunger ${Math.floor(survivor.hunger)} | Thirst ${Math.floor(survivor.thirst)} | Stamina ${survivor.stamina} | Ammo ${survivor.ammo}`;
   canvas.setAttribute("aria-label", `Full ${grid.width} by ${grid.height} world. ${stats.textContent}`);
   document.querySelector("#floor-items")!.textContent = survivor.lookAtFloor(grid).map(item => `${item.name} (${item.type})`).join(", ") || "No items on this tile.";
   document.querySelector("#inventory")!.textContent = `${survivor.inventory.length}/5: ${survivor.inventory.map(item => item.name).join(", ") || "Empty"}`;
@@ -238,335 +245,8 @@ const timer = window.setInterval(() => { if (!paused) advance(); }, 600);
 // ======================================================
 
 function runSurvivorTick(): void {
-  if (!survivor.isAlive()) {
-    return;
-  }
-
-  const action =
-    runSurvivorProgram(
-      survivorProgram,
-      {
-        survivor,
-        zombies,
-        grid,
-        canMove: tick % 2 === 1,
-      }
-    );
-
-  showStatus(
-    `Survivor selected action: ${action.type}`
-  );
-
-  executeSurvivorAction(
-    action
-  );
-}
-
-// ======================================================
-// EXECUTE ACTION
-// ======================================================
-
-function executeSurvivorAction(
-  action: SurvivorAction
-): void {
-  switch (action.type) {
-    case "openDoor":
-      showStatus(survivor.openDoor(grid) ? "Survivor opens a door." : "No closed door within one tile.");
-      break;
-    case "moveToContainer":
-      showStatus(survivor.moveToContainer(grid, action.range) ? "Moving toward a container." : "No reachable visible container to approach.");
-      break;
-    case "pickUpItems": {
-      const items = survivor.pickUpItems(grid);
-      showStatus(items.length ? `Picked up ${items.map(item => item.name).join(", ")}.` : "No items picked up (floor empty or inventory full).");
-      break;
-    }
-    case "searchContainer": {
-      const nearby = survivor.findContainers(grid);
-      const container = nearby.find(container => container.contents.length) ?? nearby[0];
-      const items = container ? survivor.searchContainer(grid, container) : null;
-      showStatus(items === null ? "No container within one tile." : items.length ? `Searched ${container!.name}: dropped ${items.map(item => item.name).join(", ")} on your tile.` : "Container is empty.");
-      break;
-    }
-    case "lookFloor":
-      showStatus(survivor.lookAtFloor(grid, action.itemType).map(item => item.name).join(", ") || "No matching floor items.");
-      break;
-    case "move":
-      moveDirection(
-        action.direction
-      );
-      break;
-
-    case "moveAway":
-      moveAwayFromZombie();
-      break;
-
-    case "attack":
-      attackZombie();
-      break;
-
-    case "wander":
-    case "explore":
-      explore();
-      break;
-
-    case "wait":
-      showStatus(
-        "Survivor waits."
-      );
-      break;
-  }
-}
-
-// ======================================================
-// MOVE DIRECTION
-// ======================================================
-
-function moveDirection(
-  direction: Direction
-): void {
-  let newX = survivor.x;
-  let newY = survivor.y;
-
-  switch (direction) {
-    case "north":
-      newY--;
-      break;
-
-    case "south":
-      newY++;
-      break;
-
-    case "east":
-      newX++;
-      break;
-
-    case "west":
-      newX--;
-      break;
-  }
-
-  const moved =
-    grid.moveEntity(
-      survivor,
-      newX,
-      newY
-    );
-
-  if (moved) {
-    showStatus(
-      `Survivor moved ${direction}.`
-    );
-  } else {
-    showStatus(
-      `Survivor could not move ${direction}.`
-    );
-  }
-}
-
-// ======================================================
-// MOVE AWAY FROM ZOMBIE
-// ======================================================
-
-let lastFleeMove: { fromX: number; fromY: number; toX: number; toY: number; direction: Direction; tick: number } | undefined;
-
-function moveAwayFromZombie(): void {
-  const nearestZombie =
-    findNearestZombie();
-
-  if (!nearestZombie) {
-    showStatus(
-      "No zombie found."
-    );
-
-    return;
-  }
-
-  const possibleMoves = [
-    {
-      x: survivor.x,
-      y: survivor.y - 1,
-      direction: "north" as Direction,
-    },
-
-    {
-      x: survivor.x,
-      y: survivor.y + 1,
-      direction: "south" as Direction,
-    },
-
-    {
-      x: survivor.x + 1,
-      y: survivor.y,
-      direction: "east" as Direction,
-    },
-
-    {
-      x: survivor.x - 1,
-      y: survivor.y,
-      direction: "west" as Direction,
-    },
-  ];
-
-  // Only consider tiles the survivor
-  // can actually move onto.
-  const walkableMoves =
-    possibleMoves.filter((move) =>
-      grid.isWalkable(
-        move.x,
-        move.y
-      )
-    );
-
-  if (walkableMoves.length === 0) {
-    showStatus(
-      "Survivor has nowhere to run."
-    );
-
-    return;
-  }
-
-  const distance = (move: { x: number; y: number }) => getDistance(move.x, move.y, nearestZombie.x, nearestZombie.y);
-  const safest = Math.max(...walkableMoves.map(distance));
-  let candidates = walkableMoves.filter(move => distance(move) === safest);
-  const previous = lastFleeMove;
-  if (previous && previous.tick === tick - 2 && previous.toX === survivor.x && previous.toY === survivor.y) {
-    const forward = candidates.filter(move => move.x !== previous.fromX || move.y !== previous.fromY);
-    if (forward.length) candidates = forward;
-    const continuing = candidates.find(move => move.direction === previous.direction);
-    if (continuing) candidates = [continuing];
-  }
-  const bestMove = candidates[Math.floor(Math.random() * candidates.length)];
-  const fromX = survivor.x, fromY = survivor.y;
-  if (!grid.moveEntity(survivor, bestMove.x, bestMove.y)) return;
-  lastFleeMove = { fromX, fromY, toX: bestMove.x, toY: bestMove.y, direction: bestMove.direction, tick };
-
-  showStatus(
-    `Survivor runs ${bestMove.direction} away from ${nearestZombie.id}.`
-  );
-}
-
-// ======================================================
-// ATTACK
-// ======================================================
-
-function attackZombie(): void {
-  const nearestZombie =
-    findNearestZombie();
-
-  if (!nearestZombie) {
-    showStatus(
-      "No zombie available to attack."
-    );
-
-    return;
-  }
-
-  const distance =
-    getDistance(
-      survivor.x,
-      survivor.y,
-      nearestZombie.x,
-      nearestZombie.y
-    );
-
-  // Melee attacks currently require
-  // the zombie to be one tile away.
-  if (distance > 1) {
-    showStatus(
-      "Zombie is too far away to attack."
-    );
-
-    return;
-  }
-
-  const damage = 25;
-
-  nearestZombie.takeDamage(
-    damage
-  );
-
-  showStatus(
-    `Survivor attacks ${nearestZombie.id} for ${damage} damage.`
-  );
-
-  if (!nearestZombie.isAlive()) {
-    showStatus(
-      `${nearestZombie.id} was killed.`
-    );
-
-    grid.removeEntity(
-      nearestZombie.id
-    );
-  }
-}
-
-// ======================================================
-// EXPLORE
-// ======================================================
-
-function explore(): void {
-  showStatus(survivor.explore(grid) ? "Survivor explores toward unseen territory." : "No reachable unexplored area. Open nearby doors to reveal more.");
-}
-
-// ======================================================
-// FIND NEAREST ZOMBIE
-// ======================================================
-
-function findNearestZombie():
-  Zombie | null {
-  return findNearestTarget(grid, survivor, zombies, { range: survivor.sightRange, predicate: zombie => zombie.isAlive() }) ?? null;
-}
-
-// ======================================================
-// DIRECTION HELPER
-// ======================================================
-
-function getPositionInDirection(
-  direction: Direction
-): {
-  x: number;
-  y: number;
-} {
-  switch (direction) {
-    case "north":
-      return {
-        x: survivor.x,
-        y: survivor.y - 1,
-      };
-
-    case "south":
-      return {
-        x: survivor.x,
-        y: survivor.y + 1,
-      };
-
-    case "east":
-      return {
-        x: survivor.x + 1,
-        y: survivor.y,
-      };
-
-    case "west":
-      return {
-        x: survivor.x - 1,
-        y: survivor.y,
-      };
-  }
-}
-
-// ======================================================
-// DISTANCE
-// ======================================================
-
-function getDistance(
-  x1: number,
-  y1: number,
-  x2: number,
-  y2: number
-): number {
-  return (
-    Math.abs(x1 - x2) +
-    Math.abs(y1 - y2)
-  );
+  const result = simulateSurvivorTick(survivorProgram, {
+    survivor, survivors: [survivor], zombies, grid, tick, canMove: tick % 2 === 1,
+  });
+  showStatus(result.message);
 }

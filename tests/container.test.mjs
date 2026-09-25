@@ -41,8 +41,8 @@ test("out of reach, diagonal, unregistered containers, and dead survivors cannot
   assert.equal(desk.contents.length, 1);
 });
 
-test("random loot supports both types and unique IDs", () => {
-  const rolls = [0.1, 0.9];
+test("random loot supports catalog types and unique IDs", () => {
+  const rolls = [0.1, 0.3];
   const items = randomizeItems(2, () => rolls.shift());
   assert.deepEqual(items.map(item => item.type), ["food", "weapon"]);
   assert.notEqual(items[0].id, items[1].id);
@@ -60,5 +60,6 @@ test("script searches nonempty containers then lists the floor", () => {
   survivor.searchContainer(grid, desk);
   assert.deepEqual(runSurvivorProgram(program, context), { type: "lookFloor", itemType: "food" });
   assert.throws(() => parseSurvivorScript("OTHERWISE\n SEARCH container", "zombie"));
-  assert.throws(() => parseSurvivorScript("OTHERWISE\n LOOK floor ammo"));
+  assert.doesNotThrow(() => parseSurvivorScript("OTHERWISE\n LOOK floor ammo"));
+  assert.throws(() => parseSurvivorScript("OTHERWISE\n LOOK floor unknown"));
 });

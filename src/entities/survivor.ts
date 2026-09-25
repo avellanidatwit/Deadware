@@ -2,12 +2,60 @@ import type { Grid, GridEntity } from "../world/grid.js";
 import { ItemContainer } from "./container.js";
 import type { Item, ItemType } from "./item.js";
 import { searchEntities, searchCells, hasLineOfSight, spatialDistance } from "../world/perception.js";
+import type { MemorySlot } from "../scripting/language/selectors.js";
 
 export class Survivor implements GridEntity {
   public readonly symbol = "S";
 
   public health = 100;
   public maxHealth = 100;
+  public hunger = 0;
+  public thirst = 0;
+  public stamina = 100;
+  public ammo = 0;
+  public equippedItemId?: string;
+  /** Position snapshots never track unseen entities. */
+  readonly memory: Partial<Record<MemorySlot, { x: number; y: number }>> = {};
+  get equippedItem(): Item | undefined { return this.inventory.find(item => item.id === this.equippedItemId); }
+
+  updateNeeds(): void {
+    if (!this.isAlive()) return;
+    this.hunger = Math.min(100, this.hunger + 0.15);
+    this.thirst = Math.min(100, this.thirst + 0.25);
+    if (this.hunger >= 100 || this.thirst >= 100) this.takeDamage(1);
+  }
+
+  useItem(type: ItemType): boolean {
+    if (!this.isAlive()) return false;
+    const index = this.carriedItems.findIndex(item => item.type === type);
+    if (index < 0) return false;
+    if (type === "food") this.hunger = Math.max(0, this.hunger - 40);
+    else if (type === "water") this.thirst = Math.max(0, this.thirst - 50);
+    else if (type === "bandage") this.health = Math.min(this.maxHealth, this.health + 30);
+    else if (type === "ammo" && this.equippedItem?.type === "gun" && this.ammo < 6) this.ammo = 6;
+    else return false;
+    this.carriedItems.splice(index, 1);
+    return true;
+  }
+
+  equip(type: ItemType): boolean {
+    if (!this.isAlive() || !["weapon", "gun"].includes(type)) return false;
+    const item = this.carriedItems.find(item => item.type === type);
+    if (!item) return false;
+    this.equippedItemId = item.id;
+    return true;
+  }
+
+  dropItem(grid: Grid, type: ItemType): boolean {
+    const cell = grid.getCell(this.x, this.y);
+    const index = this.carriedItems.findIndex(item => item.type === type);
+    if (!this.isAlive() || !cell || index < 0) return false;
+    const [item] = this.carriedItems.splice(index, 1);
+    if (item.id === this.equippedItemId) this.equippedItemId = undefined;
+    if (item.type === "gun") this.ammo = 0;
+    cell.items.push(item);
+    return true;
+  }
   readonly sightRange = 8;
   private exploredTiles = new Set<string>();
   private visibleTiles = new Set<string>();
@@ -59,10 +107,14 @@ export class Survivor implements GridEntity {
   private carriedItems: Item[] = [];
   get inventory(): readonly Item[] { return this.carriedItems.map(item => ({ ...item })); }
 
-  pickUpItems(grid: Grid): Item[] {
+  pickUpItems(grid: Grid, type?: ItemType): Item[] {
     const cell = grid.getCell(this.x, this.y);
     if (!this.isAlive() || !cell) return [];
-    const items = cell.items.splice(0, this.inventoryCapacity - this.carriedItems.length);
+    const items: Item[] = [];
+    for (let index = 0; index < cell.items.length && this.carriedItems.length + items.length < this.inventoryCapacity;) {
+      if (type === undefined || cell.items[index].type === type) items.push(...cell.items.splice(index, 1));
+      else index++;
+    }
     this.carriedItems.push(...items);
     return items.map(item => ({ ...item }));
   }
@@ -99,6 +151,7 @@ export class Survivor implements GridEntity {
     program = ""
   ) {
     this.program = program;
+    this.memory.home = { x, y };
   }
 
   takeDamage(amount: number): void {

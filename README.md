@@ -2,6 +2,10 @@
 Deadware is a persistent zombie apocalypse simulation where players program autonomous survivors—and, after death, their undead counterparts—to survive, adapt, and interact in an evolving world.
 
 
+## SurvivorScript specification
+
+See [the living game design and language specification](docs/DESIGN.md) for commands, selectors, Boolean precedence, items, needs, memory, program capacity, progression hooks, and the implementation roadmap. Run `npm test` to build and verify the simulation.
+
 ## Run the graphical simulation
 
 Run `npm install` once, then `npm start` and open http://localhost:3000 in your browser.
@@ -66,7 +70,7 @@ Both nearby script conditions and enemy targeting now require sight. Script eval
 
 ## Containers and floor items
 
-`ItemContainer` is a named storage entity (desk, cabinet, etc.) with food and weapon contents. It blocks movement but not sight. The generated city includes parked cars and building storage with randomized loot. `randomizeItems(count)` creates food or weapons with equal probability; omitting the count generates 0?3 items. Loot is generated once per container, not replenished on search.
+`ItemContainer` is a named storage entity (desk, cabinet, etc.) with catalog-defined item contents. It blocks movement but not sight. The generated city includes parked cars and building storage with randomized loot. `randomizeItems(count)` samples food, weapons, bandages, water, guns and ammo using catalog weights; omitting the count generates zero to three items. Loot is generated once per container, not replenished on search.
 
 ```text
 WHEN containerNearby
@@ -82,7 +86,7 @@ The TypeScript API exposes `survivor.findContainers(grid, range)`, `survivor.sea
 
 ## Inventory and automated looting
 
-Survivors hold at most five items, shown in the status panel. `PICK_UP items` transfers items from the current floor tile until full, leaving excess on the floor. `MOVE_TO container 10` approaches the nearest visible, reachable nonempty container within 10 tiles; omit the range to use 10. It moves one tile per update and stops adjacent. Walls block visibility; this action waits when no suitable container is visible. It does not explore automatically.
+Survivors hold at most five items, shown in the status panel. `PICK_UP items` transfers items from the current floor tile until full, leaving excess on the floor. `MOVE_TO container 10` approaches the nearest visible nonempty container within 10 tiles; omit the range to use 10. It moves one tile per update and stops adjacent. Walls block visibility; this action waits when no suitable container is visible. It does not explore automatically.
 
 ```text
 WHEN inventoryFull
@@ -133,12 +137,12 @@ const { grid } = city;
 
 Width and height default to 50, with supported integer sizes from 8 to 300. Omit `seed` for a new randomized city each restart; set it for repeatable layout and loot types. `carDensity` ranges from 0 to 1 and controls parking on eligible road tiles.
 
-Two-lane roads cross the map with randomized spacing and no perimeter road. Building lots have variable dimensions and occasional vacant spaces. Every generated building is at least 5 by 5 tiles, providing a minimum 3 by 3 interior inside the walls. Every building has a closed door and a driveway connected to the streets. Cars park on one lane, leaving the other lane and junctions clear. Cars are ordinary `ItemContainer` entities named Car, shown as a searchable C end and a non-searchable V body: both tiles block movement and work with container detection, navigation, searching, and food/weapon loot. Like other containers they do not block sight. Buildings may contain desks or cabinets where space permits.
+Two-lane roads cross the map with randomized spacing and no perimeter road. Building lots have variable dimensions and occasional vacant spaces. Every generated building is at least 5 by 5 tiles, providing a minimum 3 by 3 interior inside the walls. Every building has a closed door and a driveway connected to the streets. Cars park on one lane, leaving the other lane and junctions clear. Cars are ordinary `ItemContainer` entities named Car, shown as a searchable C end and a non-searchable V body: both tiles block movement and work with container detection, navigation, searching, and catalog loot. Like other containers they do not block sight. Buildings may contain desks or cabinets where space permits.
 
 The return value contains `grid`, `buildings`, `cars`, interior `containers`, the generated `seed`, and clear `survivorSpawn`/`zombieSpawn` positions. The page's dimensions follow the generated grid. Run `npm run build` and refresh after editing the settings.
 
 
-`WHEN` supports uppercase `AND`, for example `WHEN zombieNearby 1 AND health > 20`. All conditions must match, and actor restrictions apply to every condition. An AND chase rule uses the smallest survivor detection range in that rule. OR and parentheses are not supported.
+`WHEN` supports uppercase `AND`, for example `WHEN zombieNearby 1 AND health > 20`. All conditions must match, and actor restrictions apply to every condition. An AND chase rule uses the smallest survivor detection range in that rule. OR and NOT are supported, with precedence NOT, AND, OR. Parentheses are not supported. See the language specification for branch-specific CHASE ranges.
 
 Cars occupy two consecutive road tiles, vertically on north/south roads and horizontally on east/west roads. The default carDensity is 0.025 (2.5% of eligible parking positions). Only the C end stores loot and counts as a container; standing next to the V body alone does not allow searching. Cars are spaced to avoid overlapping each other, driveways, or intersections, and the other road lane remains clear. The road network crosses map edges where streets exit, but does not form a perimeter ring.
 
@@ -158,4 +162,4 @@ Buildings contain searchable desks, cabinets, dressers, and bookshelves (C), plu
 
 Each building independently has a 40% chance of spawning one zombie on a free interior tile. Configure `buildingZombieChance` in `generateCity` (0 disables interior zombies, 1 populates every building). The existing street zombie remains. Interior zombies run scripts and appear in the entity selector; they become visible on the map when the survivor sees them.
 
-Edit `src/data/itemCatalog.ts` to manage every inventory item definition. Each entry has a unique `key`, `name`, `type` (food or weapon), and relative loot `weight`. A weight of 0 excludes an item from random loot. Add more entries of either category to expand loot without changing the generator. `createItemByKey(key)` creates a specific item, and `randomizeItems` samples the catalog. Items keep unique instance IDs plus their catalog key. Food and weapons remain item categories; eating and equipping are not implemented.
+Edit `src/data/itemCatalog.ts` to manage every inventory item definition. Each entry has a unique `key`, `name`, `type` (food, weapon, bandage, water, gun or ammo), and relative loot `weight`. A weight of 0 excludes an item from random loot. Add more entries of these categories to expand loot without changing the generator. `createItemByKey(key)` creates a specific item, and `randomizeItems` samples the catalog. Items keep unique instance IDs plus their catalog key. Survivors can eat, heal, drink, equip, drop and use items through SurvivorScript; see the specification for effects.

@@ -62,7 +62,7 @@
             <p id="script-feedback" role="status">Apply changes to use this script on the next update.</p>
             <p><a href="#command-reference">View survivor and zombie commands</a></p>
             <p>Tab indents four spaces; Shift+Tab unindents. Select multiple lines to indent them together. Press Escape, then Tab to leave the editor.</p>
-            <p id="script-help">Use WHEN conditions and OTHERWISE with MOVE north/south/east/west, MOVE_AWAY zombie, ATTACK zombie, EXPLORE, or WAIT. Changes last until restart or refresh. For zombies, use WHEN survivorNearby with CHASE survivor, then OTHERWISE with WANDER. Add a range after either nearby condition, such as WHEN zombieNearby 10 or WHEN survivorNearby 8; omit it for the default of 5 tiles. Zombies also support MOVE, EXPLORE, WAIT, and health conditions.</p>
+            <p id="script-help">Use WHEN conditions and OTHERWISE with one action per rule. Combine conditions with NOT, AND, OR. Use selectors such as ATTACK weakest zombie, items such as USE bandage, and memory such as MOVE_TO home. See the command reference below. Changes last until restart or refresh. For zombies, use WHEN survivorNearby with CHASE survivor, then OTHERWISE with WANDER. Add a range after either nearby condition, such as WHEN zombieNearby 10 or WHEN survivorNearby 8; omit it for the default of 5 tiles. Zombies also support MOVE, EXPLORE, WAIT, and health conditions.</p>
           </section>
         </div>
         <aside aria-label="Simulation controls and status">
@@ -101,6 +101,26 @@
       <section id="command-reference" class="command-reference" aria-labelledby="commands-heading">
         <h2 id="commands-heading">SurvivorScript commands</h2>
         <p>Select an entity in the editor, enter a script, then click <strong>Apply script</strong>. Commands are case-sensitive: use uppercase action names and lowercase directions and targets. The first matching rule wins each update. Survivor movement occurs only on even-numbered ticks. On other ticks, movement rules are skipped so later matching non-movement rules can run. Zombie movement can occur every tick. Put <code>OTHERWISE</code> last. If no rule matches, the entity waits.</p>
+        <h3>Selectors, items, needs, and memory</h3>
+        <p>Survivors see at most eight tiles. Use <code>nearest</code> or <code>farthest</code> for targets; <code>weakest</code> and <code>strongest</code> select actors by health. Omit the selector for nearest. A target behind a wall is unavailable. Remembered locations retain their last known coordinates.</p>
+        <table>
+          <thead><tr><th scope="col">Syntax</th><th scope="col">Meaning</th></tr></thead>
+          <tbody>
+            <tr><td><code>MOVE_TO nearest food</code><br><code>FOLLOW nearest survivor</code></td><td>Approach visible floor loot, or follow a visible survivor and stop adjacent.</td></tr>
+            <tr><td><code>ATTACK weakest zombie</code><br><code>MOVE_AWAY nearest zombie</code></td><td>Attack the weakest zombie within reach, or flee a visible enemy.</td></tr>
+            <tr><td><code>hasItem food</code><br><code>equipped weapon</code></td><td>Test carried or equipped item categories: food, weapon, bandage, water, gun, ammo.</td></tr>
+            <tr><td><code>PICK_UP food</code><br><code>DROP weapon</code><br><code>EQUIP weapon</code></td><td>Collect a category from the current floor tile, drop one matching item, or equip a carried weapon/gun.</td></tr>
+            <tr><td><code>hungry</code><br><code>thirsty</code><br><code>stamina &lt; 20</code></td><td>Hunger/thirst above 70, or low stamina. Numeric hunger, thirst, stamina and ammo comparisons also work.</td></tr>
+            <tr><td><code>EAT food</code><br><code>USE water</code><br><code>USE bandage</code></td><td>Consume food (-40 hunger), water (-50 thirst), or a bandage (+30 health).</td></tr>
+            <tr><td><code>SHOOT nearest zombie</code><br><code>RELOAD</code></td><td>Equipped gun deals 40 damage per round. Reload consumes an ammo pack to fill six rounds.</td></tr>
+            <tr><td><code>zombieCount 5 &gt;= 3</code><br><code>survivorCount 8 &gt;= 2</code></td><td>Count visible living actors within a range, excluding self.</td></tr>
+            <tr><td><code>itemNearby food 5</code><br><code>buildingNearby</code><br><code>carNearby</code></td><td>Detect visible floor loot, building terrain, or car trunks. Default range is eight.</td></tr>
+            <tr><td><code>distance nearest zombie &lt; 3</code><br><code>SEARCH food</code></td><td>Compare target distance, or approach a visible food pile (explore if absent). Pick up in a separate rule.</td></tr>
+            <tr><td><code>SET home = position</code><br><code>REMEMBER nearest container AS target</code></td><td>Save a position in home, target, lastZombie or lastContainer. Home starts at spawn; last-seen slots update from sight. Each memory command consumes one action.</td></tr>
+            <tr><td><code>remembered target</code><br><code>RETURN home</code><br><code>PATROL target</code></td><td>Test a memory slot, return to a saved position, or patrol between home and a saved walkable position.</td></tr>
+          </tbody>
+        </table>
+        <p>Hunger and thirst rise each tick; reaching 100 damages health. Movement costs two stamina; stationary actions recover three. Program memory usage is shown when applying scripts; this sandbox has all capabilities unlocked and no program limit.</p>
         <h3>Move in a specific direction</h3>
         <p>For example, replace the survivor's script with this to move east (right) one tile every two updates:</p>
         <pre><code>OTHERWISE
@@ -118,13 +138,13 @@ OTHERWISE
             <table>
               <thead><tr><th scope="col">Command</th><th scope="col">Effect</th></tr></thead>
               <tbody>
-                <tr><td><code>MOVE_TO container 10</code></td><td>Move one tile toward the nearest visible, reachable nonempty container. Optional sight range defaults to 10.</td></tr>
+                <tr><td><code>MOVE_TO container 10</code></td><td>Move one tile toward the nearest visible nonempty container. Optional sight range defaults to 10.</td></tr>
                 <tr><td><code>PICK_UP items</code></td><td>Pick up floor items until the five-item inventory is full. Excess items stay on the floor.</td></tr>
                 <tr><td><code>SEARCH container</code></td><td>Empty an adjacent container onto your current floor tile. Reach is one horizontal or vertical tile. Prefer a nonempty container.</td></tr>
                 <tr><td><code>LOOK floor</code><br><code>LOOK floor food</code><br><code>LOOK floor weapon</code></td><td>List items on your current tile, optionally filtered by type. This does not pick them up.</td></tr>
                 <tr><td><code>MOVE north</code><br><code>MOVE south</code><br><code>MOVE east</code><br><code>MOVE west</code></td><td>Move one tile in the chosen direction if walkable.</td></tr>
                 <tr><td><code>MOVE_AWAY zombie</code></td><td>Choose a walkable neighboring tile farthest from the nearest living zombie.</td></tr>
-                <tr><td><code>ATTACK zombie</code></td><td>Deal 25 damage to the nearest living zombie if within one tile.</td></tr>
+                <tr><td><code>ATTACK zombie</code></td><td>Deal 25 damage (40 with an equipped weapon) to the nearest visible living zombie within one tile.</td></tr>
                 <tr><td><code>EXPLORE</code><br><code>WANDER</code></td><td>Move toward unseen areas through revealed terrain (survivors); zombies wander randomly.</td></tr>
                 <tr><td><code>WAIT</code></td><td>Do nothing this update.</td></tr>
               </tbody>
@@ -160,7 +180,7 @@ OTHERWISE
           </section>
         </div>
         <h3>Conditions and rule syntax</h3>
-        <p>Combine conditions with uppercase <code>AND</code>. Every condition must match; actions still run one per update.</p>
+        <p>Combine conditions with <code>NOT</code>, <code>AND</code>, and <code>OR</code>, in that precedence order. Parentheses are not supported. Actions still run one per update; an unavailable target consumes the action. Movement rules also skip when stamina is below two.</p>
         <pre><code>WHEN zombieNearby 1 AND health &gt; 20
     ATTACK zombie
 
@@ -193,7 +213,7 @@ OTHERWISE
             <tr><td><code>WHEN itemsOnFloor</code></td><td>There are items on the survivor's current tile.</td></tr>
             <tr><td><code>WHEN containerNearby</code><br><code>WHEN containerNearby 10</code></td><td>Survivor only: a visible, nonempty container is within the specified range (default 1). SEARCH still requires adjacency; use MOVE_TO container 10 to approach.</td></tr>
             <tr><td><code>WHEN zombieNearby</code><br><code>WHEN zombieNearby 10</code></td><td>A visible living zombie is within the given number of tiles (default 5). Requires line of sight and excludes the observer.</td></tr>
-            <tr><td><code>WHEN survivorNearby</code><br><code>WHEN survivorNearby 8</code></td><td>Zombie only: a visible living survivor is within the given range (default 5). CHASE uses this rule's range too.</td></tr>
+            <tr><td><code>WHEN survivorNearby</code><br><code>WHEN survivorNearby 8</code></td><td>A visible living survivor other than self is within the given range (default 5). CHASE uses this rule's range too.</td></tr>
             <tr><td><code>WHEN health &lt; 20</code></td><td>Compare the entity's own health with a nonnegative whole number. Operators: <code>&lt;</code>, <code>&gt;</code>, <code>&lt;=</code>, <code>&gt;=</code>, <code>==</code>, <code>!=</code>.</td></tr>
             <tr><td><code>OTHERWISE</code></td><td>Fallback if no earlier rule matched. Write one action on the next line.</td></tr>
             <tr><td><code># Comment</code></td><td>Lines starting with # and blank lines are ignored.</td></tr>

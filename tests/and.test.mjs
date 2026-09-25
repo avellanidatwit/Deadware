@@ -18,7 +18,8 @@ test("AND requires all conditions and preserves chase range and actor restrictio
     assert.throws(() => parseSurvivorScript(`WHEN ${condition}\n WAIT`), /Line 1/);
   }
   assert.throws(() => parseSurvivorScript("WHEN health > 0 AND containerNearby\n WAIT", "zombie"));
-  assert.throws(() => parseSurvivorScript("WHEN health > 0 AND survivorNearby\n WAIT"));
+  assert.doesNotThrow(() => parseSurvivorScript("WHEN health > 0 AND survivorNearby\n WAIT"));
+  assert.throws(() => parseSurvivorScript("OTHERWISE\n CHASE survivor"));
 });
 
 test("only the car's container end can be searched", () => {
