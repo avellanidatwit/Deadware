@@ -1,109 +1,10 @@
 <!doctype html>
-<html lang="en">
-  <head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Deadware</title>
-    <style>
-      * { box-sizing: border-box; }
-      body { margin: 0; padding: 24px; background: #101719; color: #e2ebe7; font: 16px system-ui, sans-serif; }
-      main { max-width: 1120px; margin: auto; }
-      h1 { margin: 0 0 4px; letter-spacing: .08em; }
-      p { color: #b1c4bb; line-height: 1.5; }
-      .layout { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 24px; align-items: start; }
-      canvas { display: block; width: 100%; max-width: 76vh; height: auto; border: 1px solid #53675e; justify-self: end; }
-      aside { min-width: 0; }
-      .world-column { min-width: 0; }
-      .world-column canvas { margin-left: auto; }
-      .script-panel { margin-top: 20px; padding: 20px; background: #1b2a25; border: 1px solid #53675e; border-radius: 10px; }
-      .script-panel h2 { margin: 0 0 16px; font-size: 18px; }
-      .script-panel label { display: block; margin: 12px 0 6px; }
-      select, textarea { width: 100%; background: #101719; color: #e2ebe7; border: 1px solid #638271; border-radius: 6px; padding: 10px; font: inherit; }
-      textarea { display: block; resize: vertical; min-height: 240px; margin-bottom: 12px; font: 14px/1.6 monospace; tab-size: 4; }
-      textarea[aria-invalid="true"] { border-color: #ef7777; }
-      select:focus-visible, textarea:focus-visible { outline: 2px solid #79e5ab; outline-offset: 3px; }
-      #script-feedback { min-height: 1.5em; }
-      .status-panel { padding: 20px; margin-bottom: 20px; background: #1b2a25; border: 1px solid #53675e; border-radius: 10px; }
-      .status-panel h2 { margin: 0 0 16px; font-size: 18px; }
-      #stats { margin: 0; color: #e2ebe7; font-variant-numeric: tabular-nums; line-height: 1.8; }
-      .status-label { margin: 16px 0 4px; font-size: 12px; text-transform: uppercase; letter-spacing: .08em; }
-      button { background: #253c32; border: 1px solid #638271; border-radius: 6px; padding: 9px 14px; color: #e2ebe7; font: inherit; cursor: pointer; margin: 0 4px 8px 0; }
-      button:disabled { opacity: .45; cursor: default; }
-      button:focus-visible { outline: 2px solid #79e5ab; outline-offset: 3px; }
-      ul { padding: 0; list-style: none; line-height: 2; }
-      .swatch { display: inline-block; width: 14px; height: 14px; margin-right: 8px; border: 1px solid #53675e; }
-      #status { min-height: 3em; margin: 0; color: #79e5ab; font-weight: 600; }
-      .command-reference { margin-top: 32px; padding: 20px; border: 1px solid #53675e; border-radius: 10px; background: #1b2a25; }
-      .command-reference h2 { margin-top: 0; }
-      .command-columns { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr)); gap: 24px; }
-      .command-reference table { width: 100%; border-collapse: collapse; }
-      .command-reference th, .command-reference td { padding: 10px 6px; border-bottom: 1px solid #3b5146; text-align: left; vertical-align: top; }
-      .command-reference code { color: #a9efc8; }
-      .command-reference pre { padding: 16px; background: #101719; border-radius: 6px; overflow-x: auto; line-height: 1.6; }
-      a { color: #a9efc8; }
-      @media (max-width: 800px) { body { padding: 12px; } .layout { grid-template-columns: minmax(0, 1fr) 240px; gap: 16px; } .status-panel { padding: 16px; } }
-      @media (max-width: 560px) { .layout { grid-template-columns: 1fr; } canvas { justify-self: center; } }
-    </style>
-  </head>
-  <body>
-    <main>
-      <h1>DEADWARE</h1>
-      <p id="world-size">World simulation</p>
-      <div class="layout">
-        <div class="world-column">
-          <canvas id="world" role="img" aria-label="Simulation grid">Your browser needs canvas support to display the world.</canvas>
-          <section class="script-panel" aria-labelledby="script-heading">
-            <h2 id="script-heading">SurvivorScript editor</h2>
-            <label for="script-entity">Entity</label>
-            <select id="script-entity"></select>
-            <label for="script-code">Script</label>
-            <textarea id="script-code" rows="14" spellcheck="false" autocapitalize="off" aria-describedby="script-help script-feedback"></textarea>
-            <button id="apply-script" type="button">Apply script</button>
-            <p id="script-feedback" role="status">Apply changes to use this script on the next update.</p>
-            <p><a href="#command-reference">View survivor and zombie commands</a></p>
-            <p>Tab indents four spaces; Shift+Tab unindents. Select multiple lines to indent them together. Press Escape, then Tab to leave the editor.</p>
-            <p id="script-help">Use WHEN conditions and OTHERWISE with one action per rule. Combine conditions with NOT, AND, OR. Use selectors such as ATTACK weakest zombie, items such as USE bandage, and memory such as MOVE_TO home. See the command reference below. Changes last until restart or refresh. For zombies, use WHEN survivorNearby with CHASE survivor, then OTHERWISE with WANDER. Add a range after either nearby condition, such as WHEN zombieNearby 10 or WHEN survivorNearby 8; omit it for the default of 5 tiles. Zombies also support MOVE, EXPLORE, WAIT, and health conditions.</p>
-          </section>
-        </div>
-        <aside aria-label="Simulation controls and status">
-          <section class="status-panel" aria-labelledby="status-heading">
-            <h2 id="status-heading">Survivor status</h2>
-            <p id="stats"></p>
-            <p class="status-label">Latest action</p>
-            <p id="status" role="status"></p>
-            <p class="status-label">Items underfoot</p>
-            <p id="floor-items">No items on this tile.</p>
-            <p class="status-label">Inventory</p>
-            <p id="inventory">0/5: Empty</p>
-          </section>
-          <button id="pause" type="button">Pause</button>
-          <button id="step" type="button" disabled>Step</button>
-          <button id="stop" type="button">Stop</button>
-          <button id="restart" type="button">Restart</button>
-          <ul aria-label="Map legend">
-            <li><span class="swatch" style="background:#a38c70"></span>F ? Decorative furniture (not searchable)</li>
-            <li>Darkened tiles: unexplored</li>
-            <li><span class="swatch" style="background:#454b53"></span>Road</li>
-            <li><span class="swatch" style="background:#b594d6"></span>V ? Car body (C end is searchable)</li>
-            <li><span class="swatch" style="background:#638271"></span>Open door</li>
-            <li><span class="swatch" style="background:#b594d6"></span>C · Container</li>
-            <li><span class="swatch" style="background:#f1d878"></span>* · Floor items</li>
-            <li><span class="swatch" style="background:#79e5ab"></span>S · Survivor</li>
-            <li><span class="swatch" style="background:#ef7777"></span>Z · Zombie</li>
-            <li><span class="swatch" style="background:#172823"></span>Open ground</li>
-            <li><span class="swatch" style="background:#88949e"></span>Building wall</li>
-            <li><span class="swatch" style="background:#39464f"></span>Building floor</li>
-            <li><span class="swatch" style="background:#d4a653"></span>Closed door</li>
-          </ul>
-          <p>Survivor sight: 8 tiles, blocked by walls and closed doors. Revealed terrain stays visible; entities require current sight. The simulation runs until stopped. Pause to step through individual updates, Stop to cancel, or Restart to begin again.</p>
-        </aside>
-      </div>
-      <section id="command-reference" class="command-reference" aria-labelledby="commands-heading">
-        <h2 id="commands-heading">SurvivorScript commands</h2>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>SurvivorScript Wiki | Deadware</title><link rel="stylesheet" href="/site.css"></head><body class="reading-page"><a class="skip-link" href="#main-content">Skip to content</a><header class="site-header"><a class="brand" href="/">DEADWARE<span>Program. Adapt. Survive.</span></a><nav aria-label="Main navigation"><a href="/">Game</a><a href="/wiki" aria-current="page">Wiki</a><a href="/tutorial">Tutorial</a><a href="/account">Account</a></nav></header><main id="main-content"><div class="page-heading"><p class="eyebrow">Field manual / 01</p><h1>SurvivorScript Wiki</h1><p>Everything your survivor can sense, remember, and do. Build a priority list that keeps them alive.</p></div><div class="wiki-layout"><aside class="contents"><p class="eyebrow">On this page</p><nav aria-label="Wiki contents"><a href="#command-reference">Rule execution</a><a href="#selectors">Targets, items & memory</a><a href="#movement">Movement</a><a href="#survivor-commands">Survivor actions</a><a href="#zombie-commands">Zombie actions</a><a href="#conditions">Conditions & examples</a></nav><a class="text-link" href="/tutorial">New here? Start the tutorial &rarr;</a></aside><article>      <section id="command-reference" class="command-reference" aria-labelledby="commands-heading">
+        <h2 id="commands-heading">Rule execution</h2>
         <p>Select an entity in the editor, enter a script, then click <strong>Apply script</strong>. Commands are case-sensitive: use uppercase action names and lowercase directions and targets. The first matching rule wins each update. Survivor movement occurs only on even-numbered ticks. On other ticks, movement rules are skipped so later matching non-movement rules can run. Zombie movement can occur every tick. Put <code>OTHERWISE</code> last. If no rule matches, the entity waits.</p>
-        <h3>Selectors, items, needs, and memory</h3>
+        <h3 id="selectors">Selectors, items, needs, and memory</h3>
         <p>Survivors see at most eight tiles. Use <code>nearest</code> or <code>farthest</code> for targets; <code>weakest</code> and <code>strongest</code> select actors by health. Omit the selector for nearest. A target behind a wall is unavailable. Remembered locations retain their last known coordinates.</p>
-        <table>
+        <div class="table-scroll" tabindex="0" role="region" aria-label="Command reference table"><table>
           <thead><tr><th scope="col">Syntax</th><th scope="col">Meaning</th></tr></thead>
           <tbody>
             <tr><td><code>MOVE_TO nearest food</code><br><code>FOLLOW nearest survivor</code></td><td>Approach visible floor loot, or follow a visible survivor and stop adjacent.</td></tr>
@@ -119,14 +20,14 @@
             <tr><td><code>SET home = position</code><br><code>REMEMBER nearest container AS target</code></td><td>Save a position in home, target, lastZombie or lastContainer. Home starts at spawn; last-seen slots update from sight. Each memory command consumes one action.</td></tr>
             <tr><td><code>remembered target</code><br><code>RETURN home</code><br><code>PATROL target</code></td><td>Test a memory slot, return to a saved position, or patrol between home and a saved walkable position.</td></tr>
           </tbody>
-        </table>
+        </table></div>
         <p>Hunger and thirst rise each tick; reaching 100 damages health. Movement costs two stamina; stationary actions recover three. Program memory usage is shown when applying scripts; this sandbox has all capabilities unlocked and no program limit.</p>
-        <h3>Move in a specific direction</h3>
+        <h3 id="movement">Move in a specific direction</h3>
         <p>For example, replace the survivor's script with this to move east (right) one tile every two updates:</p>
         <pre><code>OTHERWISE
     MOVE east</code></pre>
         <p>Use <code>north</code> for up, <code>south</code> for down, <code>east</code> for right, or <code>west</code> for left. Movement stops at walls and grid edges. This rule repeats every movement tick (every two updates for survivors); it is not a one-time instruction. Pause and use Step to run one update at a time.</p>
-        <div class="command-columns">
+        <div class="command-sections">
           <section aria-labelledby="survivor-commands">
             <h3 id="survivor-commands">Survivor actions</h3>
             <p><code>OPEN door</code> opens one adjacent closed door without moving. Use:</p>
@@ -135,7 +36,7 @@
 
 OTHERWISE
     EXPLORE</code></pre>
-            <table>
+            <div class="table-scroll" tabindex="0" role="region" aria-label="Command reference table"><table>
               <thead><tr><th scope="col">Command</th><th scope="col">Effect</th></tr></thead>
               <tbody>
                 <tr><td><code>MOVE_TO container 10</code></td><td>Move one tile toward the nearest visible nonempty container. Optional sight range defaults to 10.</td></tr>
@@ -145,10 +46,10 @@ OTHERWISE
                 <tr><td><code>MOVE north</code><br><code>MOVE south</code><br><code>MOVE east</code><br><code>MOVE west</code></td><td>Move one tile in the chosen direction if walkable.</td></tr>
                 <tr><td><code>MOVE_AWAY zombie</code></td><td>Choose a walkable neighboring tile farthest from the nearest living zombie.</td></tr>
                 <tr><td><code>ATTACK zombie</code></td><td>Deal 25 damage (40 with an equipped weapon) to the nearest visible living zombie within one tile.</td></tr>
-                <tr><td><code>EXPLORE</code><br><code>WANDER</code></td><td>Move toward unseen areas through revealed terrain (survivors); zombies wander randomly.</td></tr>
+                <tr><td><code>EXPLORE</code><br><code>WANDER</code></td><td>Survivors visit revealed interior floor tiles first, then move toward unseen areas through known terrain. Zombies wander randomly.</td></tr>
                 <tr><td><code>WAIT</code></td><td>Do nothing this update.</td></tr>
               </tbody>
-            </table>
+            </table></div>
             <h3>Survivor example</h3>
             <pre><code>WHEN zombieNearby 10
     MOVE_AWAY zombie
@@ -159,15 +60,15 @@ OTHERWISE
           <section aria-labelledby="zombie-commands">
             <h3 id="zombie-commands">Zombie actions</h3>
             <p><code>ATTACK survivor</code> deals 20 damage to the nearest visible living survivor within one tile (no diagonals). Place <code>WHEN survivorNearby 1</code> above the chase rule.</p>
-            <table>
+            <div class="table-scroll" tabindex="0" role="region" aria-label="Command reference table"><table>
               <thead><tr><th scope="col">Command</th><th scope="col">Effect</th></tr></thead>
               <tbody>
                 <tr><td><code>MOVE north</code><br><code>MOVE south</code><br><code>MOVE east</code><br><code>MOVE west</code></td><td>Move one tile in the chosen direction if walkable.</td></tr>
                 <tr><td><code>CHASE survivor</code></td><td>Move toward the nearest visible living survivor in detection range, routing around walls. Stop adjacent; chasing does not attack. Wait if no target or route is available.</td></tr>
-                <tr><td><code>WANDER</code><br><code>EXPLORE</code></td><td>Move toward unseen areas through revealed terrain (survivors); zombies wander randomly.</td></tr>
+                <tr><td><code>WANDER</code><br><code>EXPLORE</code></td><td>Survivors visit revealed interior floor tiles first, then move toward unseen areas through known terrain. Zombies wander randomly.</td></tr>
                 <tr><td><code>WAIT</code></td><td>Do nothing this update.</td></tr>
               </tbody>
-            </table>
+            </table></div>
             <h3>Zombie example</h3>
             <pre><code>WHEN survivorNearby 1
     ATTACK survivor
@@ -179,7 +80,7 @@ OTHERWISE
     WANDER</code></pre>
           </section>
         </div>
-        <h3>Conditions and rule syntax</h3>
+        <h3 id="conditions">Conditions and rule syntax</h3>
         <p>Combine conditions with <code>NOT</code>, <code>AND</code>, and <code>OR</code>, in that precedence order. Parentheses are not supported. Actions still run one per update; an unavailable target consumes the action. Movement rules also skip when stamina is below two.</p>
         <pre><code>WHEN zombieNearby 1 AND health &gt; 20
     ATTACK zombie
@@ -204,7 +105,7 @@ OTHERWISE
 
 OTHERWISE
     LOOK floor</code></pre>
-        <table>
+        <div class="table-scroll" tabindex="0" role="region" aria-label="Command reference table"><table>
           <thead><tr><th scope="col">Syntax</th><th scope="col">Meaning</th></tr></thead>
           <tbody>
             <tr><td><code>WHEN nearbydoor</code></td><td>Survivor only: a closed door is one horizontal or vertical tile away. Open doors do not match.</td></tr>
@@ -218,11 +119,7 @@ OTHERWISE
             <tr><td><code>OTHERWISE</code></td><td>Fallback if no earlier rule matched. Write one action on the next line.</td></tr>
             <tr><td><code># Comment</code></td><td>Lines starting with # and blank lines are ignored.</td></tr>
           </tbody>
-        </table>
+        </table></div>
         <p>Ranges must be nonnegative whole numbers; 0 detects only the same tile. Distances count horizontal plus vertical tiles, including the range boundary. Walls block sight, including diagonally through corners; closed doors block sight and movement; open doors allow both. Losing sight ends the chase, so the next matching script rule applies. Each WHEN or OTHERWISE must be followed by exactly one action line. Changes take effect on the next update and last until refresh or restart.</p>
       </section>
-      <noscript>Enable JavaScript to run the simulation.</noscript>
-    </main>
-    <script type="module" src="/dist/main.js"></script>
-  </body>
-</html>
+</article></div></main></body></html>

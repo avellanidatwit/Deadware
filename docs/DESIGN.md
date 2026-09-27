@@ -6,7 +6,7 @@ This is the living reference for the implemented simulation and SurvivorScript. 
 
 The browser advances every 600 ms. Survivors act first, then living zombies. Pause freezes ticks and needs; Step advances one tick while paused. Restart generates a new session. Survivor movement is permitted every second update (displayed ticks 2, 4, 6, ...); zombies can move each update. Each action consumes one update, including an unsuccessful action. Death stops all actions and removes the entity from the grid.
 
-The generated city contains roads, buildings, doors, furniture, containers, cars and zombies. Distances use Manhattan distance, with inclusive boundaries. Walls and closed doors block sight; diagonal corner gaps do not grant sight. Closed doors and solid furniture block movement. Survivors see up to eight tiles; larger script ranges cannot extend this. The map remembers explored terrain. Survivor navigation uses revealed terrain, while EXPLORE seeks unexplored boundaries. An unreachable selected target makes that action fail; selection does not switch to another target automatically.
+The generated city contains roads, buildings, doors, furniture, containers, cars and zombies. Distances use Manhattan distance, with inclusive boundaries. Walls and closed doors block sight; diagonal corner gaps do not grant sight. Closed doors and solid furniture block movement. Survivors see up to eight tiles; larger script ranges cannot extend this. The map remembers explored terrain. Survivor navigation uses revealed terrain, while EXPLORE visits revealed, unvisited interior floor tiles first, then seeks unexplored boundaries. The map uses dark unexplored tiles, gray remembered terrain, bright visible terrain, and red outlines along the current vision boundary. Entities and floor loot remain hidden outside current sight. An unreachable selected target makes that action fail; selection does not switch to another target automatically.
 
 ## SurvivorScript language
 
@@ -53,7 +53,7 @@ Legacy commands and action objects are preserved by the public facade; explicit 
 | `MOVE_TO [selector] type [range]` | One step toward the selected target; stop adjacent to actors, doors, storage or blocked terrain, on top of floor piles or remembered walkable locations |
 | `MOVE_TO container [range]` | Legacy alias, default range 10 (still capped at sight range 8) |
 | `MOVE_AWAY [selector] zombie [range]` | Safest walkable neighboring tile by distance from that zombie; retains direction on ties to avoid oscillation |
-| `EXPLORE`, `WANDER` | Seek an unexplored boundary on revealed terrain |
+| `EXPLORE`, `WANDER` | Visit revealed interior floor tiles not yet walked on, then seek an unexplored boundary |
 | `FOLLOW [selector] survivor [range]` | Approach a visible survivor and stop adjacent; does not track them through walls |
 | `RETURN home` | Navigate to a remembered location |
 | `PATROL target` | Repeatedly travel between home and a remembered location; both endpoints must be walkable and reachable |
@@ -158,7 +158,7 @@ The editor applies valid scripts on the next tick, retains drafts when switching
 
 `src/scripting/survivorScript.ts` is the stable public entry point. `language/` owns types, selectors, capability metadata and shared traversal/classification. `parser/` handles rules, conditions, actions and targets. `runtime/` owns context, condition evaluation, target resolution, rule selection, action execution and complete survivor ticks. `main.ts` handles browser controls and rendering; it delegates simulation behavior to the runtime. Entity classes own inventory and needs state. World perception remains the source of LOS and spatial queries.
 
-Run `npm test` to build and test parsing, actor restrictions, inventory conservation, sight, targeting, combat, memory, cooldowns, needs, program budgets, city generation, browser controls and sustained simulation.
+Pages and styles live in `public/`. Run `npm test` to build and run the five essential smoke tests: script validation, visible target selection, sustained scavenging, zombie combat, and browser controls/movement cooldowns. The suite intentionally omits exhaustive feature edge cases.
 
 ## Roadmap and boundaries
 

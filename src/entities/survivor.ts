@@ -59,12 +59,14 @@ export class Survivor implements GridEntity {
   readonly sightRange = 8;
   private exploredTiles = new Set<string>();
   private visibleTiles = new Set<string>();
+  private visitedTiles = new Set<string>();
   hasExplored(x: number, y: number): boolean { return this.exploredTiles.has(`${x},${y}`); }
   canSee(x: number, y: number): boolean { return this.visibleTiles.has(`${x},${y}`); }
 
   updateVision(grid: Grid): void {
     this.visibleTiles.clear();
     if (!this.isAlive()) return;
+    this.visitedTiles.add(`${this.x},${this.y}`);
     for (let y = Math.max(0, this.y - this.sightRange); y <= Math.min(grid.height - 1, this.y + this.sightRange); y++) {
       for (let x = Math.max(0, this.x - this.sightRange); x <= Math.min(grid.width - 1, this.x + this.sightRange); x++) {
         if (hasLineOfSight(grid, this, { x, y }, { range: this.sightRange })) {
@@ -75,18 +77,21 @@ export class Survivor implements GridEntity {
     }
   }
 
-  /** Route across revealed terrain toward the nearest edge of unexplored space. */
+  /** Visit known interiors, then route toward the nearest unexplored boundary. */
   explore(grid: Grid): boolean {
     this.updateVision(grid);
     if (!this.isAlive()) return false;
     const offsets = [[0, -1], [0, 1], [1, 0], [-1, 0]];
     const queue: { x: number; y: number; first?: { x: number; y: number } }[] = [{ x: this.x, y: this.y }];
     const seen = new Set([`${this.x},${this.y}`]);
+    let frontierStep: { x: number; y: number } | undefined;
     for (let index = 0; index < queue.length; index++) {
       const current = queue[index];
       const frontier = offsets.some(([dx, dy]) => grid.isValidPosition(current.x + dx, current.y + dy) &&
         !this.hasExplored(current.x + dx, current.y + dy));
-      if (frontier && current.first) {
+      if (frontier && current.first && !frontierStep) frontierStep = current.first;
+      if (current.first && grid.getCell(current.x, current.y)?.tileType === "buildingFloor" &&
+          !this.visitedTiles.has(`${current.x},${current.y}`)) {
         const moved = grid.moveEntity(this, current.first.x, current.first.y);
         this.updateVision(grid);
         return moved;
@@ -99,7 +104,10 @@ export class Survivor implements GridEntity {
         }
       }
     }
-    return false;
+    if (!frontierStep) return false;
+    const moved = grid.moveEntity(this, frontierStep.x, frontierStep.y);
+    this.updateVision(grid);
+    return moved;
   }
 
   public program: string;

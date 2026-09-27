@@ -15,6 +15,16 @@ The entire 50 x 50 grid is drawn initially and after every update (600 ms apart)
 `npm run build` compiles the TypeScript. After editing source files, restart `npm start` and refresh the browser.
 
 
+## Project layout
+
+- `public/`: Game, Wiki, Tutorial and Account HTML pages, shared `site.css`, and game-specific `game.css`.
+- `src/`: TypeScript simulation and scripting code; compiled into `dist/`.
+- `server.mjs`: Serves public pages and compiled modules through explicit routes.
+- `docs/`: Design and language specification.
+- `tests/`: Five smoke tests in two files covering script validation, visibility/targeting, a 250-tick scavenging run, zombie combat and browser controls. Run `npm test`.
+
+Page URLs remain `/`, `/wiki`, `/tutorial`, and `/account`. Restart the server after changing its routes.
+
 ## Zombie scripts
 
 Zombies execute SurvivorScript after the survivor on every update. Select a zombie in the editor and apply changes to use them on the next tick. The default script is:

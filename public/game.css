@@ -1,0 +1,31 @@
+* { box-sizing: border-box; }
+body { margin: 0; padding: 24px; background: #101719; color: #e2ebe7; font: 16px system-ui, sans-serif; }
+main { max-width: 1120px; margin: auto; }
+h1 { margin: 0 0 4px; letter-spacing: .08em; }
+p { color: #b1c4bb; line-height: 1.5; }
+.layout { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 24px; align-items: start; }
+canvas { display: block; width: 100%; max-width: 76vh; height: auto; border: 1px solid #53675e; justify-self: end; }
+aside { min-width: 0; }
+.world-column { min-width: 0; }
+.world-column canvas { margin-left: auto; }
+.script-panel { margin-top: 20px; padding: 20px; background: #1b2a25; border: 1px solid #53675e; border-radius: 10px; }
+.script-panel h2 { margin: 0 0 16px; font-size: 18px; }
+.script-panel label { display: block; margin: 12px 0 6px; }
+select, textarea { width: 100%; background: #101719; color: #e2ebe7; border: 1px solid #638271; border-radius: 6px; padding: 10px; font: inherit; }
+textarea { display: block; resize: vertical; min-height: 240px; margin-bottom: 12px; font: 14px/1.6 monospace; tab-size: 4; }
+textarea[aria-invalid="true"] { border-color: #ef7777; }
+select:focus-visible, textarea:focus-visible { outline: 2px solid #79e5ab; outline-offset: 3px; }
+#script-feedback { min-height: 1.5em; }
+.status-panel { padding: 20px; margin-bottom: 20px; background: #1b2a25; border: 1px solid #53675e; border-radius: 10px; }
+.status-panel h2 { margin: 0 0 16px; font-size: 18px; }
+#stats { margin: 0; color: #e2ebe7; font-variant-numeric: tabular-nums; line-height: 1.8; }
+.status-label { margin: 16px 0 4px; font-size: 12px; text-transform: uppercase; letter-spacing: .08em; }
+button { background: #253c32; border: 1px solid #638271; border-radius: 6px; padding: 9px 14px; color: #e2ebe7; font: inherit; cursor: pointer; margin: 0 4px 8px 0; }
+button:disabled { opacity: .45; cursor: default; }
+button:focus-visible { outline: 2px solid #79e5ab; outline-offset: 3px; }
+ul { padding: 0; list-style: none; line-height: 2; }
+.swatch { display: inline-block; width: 14px; height: 14px; margin-right: 8px; border: 1px solid #53675e; }
+#status { min-height: 3em; margin: 0; color: #79e5ab; font-weight: 600; }
+a { color: #a9efc8; }
+@media (max-width: 800px) { body { padding: 12px; } .layout { grid-template-columns: minmax(0, 1fr) 240px; gap: 16px; } .status-panel { padding: 16px; } }
+@media (max-width: 560px) { .layout { grid-template-columns: 1fr; } canvas { justify-self: center; } }

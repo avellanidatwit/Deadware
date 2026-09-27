@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Deadware</title>
+    <link rel="stylesheet" href="/site.css">
+    <link rel="stylesheet" href="/game.css">
+  </head>
+  <body>
+    <a class="skip-link" href="#main-content">Skip to content</a><header class="site-header"><a class="brand" href="/">DEADWARE<span>Program. Adapt. Survive.</span></a><nav aria-label="Main navigation"><a href="/" aria-current="page">Game</a><a href="/wiki">Wiki</a><a href="/tutorial">Tutorial</a><a href="/account">Account</a></nav></header>
+    <main id="main-content">
+      <h1>DEADWARE</h1>
+      <p id="world-size">World simulation</p>
+      <div class="layout">
+        <div class="world-column">
+          <canvas id="world" role="img" aria-label="Simulation grid">Your browser needs canvas support to display the world.</canvas>
+          <section class="script-panel" aria-labelledby="script-heading">
+            <h2 id="script-heading">SurvivorScript editor</h2>
+            <label for="script-entity">Entity</label>
+            <select id="script-entity"></select>
+            <label for="script-code">Script</label>
+            <textarea id="script-code" rows="14" spellcheck="false" autocapitalize="off" aria-describedby="script-help script-feedback"></textarea>
+            <button id="apply-script" type="button">Apply script</button>
+            <p id="script-feedback" role="status">Apply changes to use this script on the next update.</p>
+            <p><a href="/wiki#command-reference" target="_blank" rel="noopener">View commands in the Wiki (new tab)</a></p>
+            <p>Tab indents four spaces; Shift+Tab unindents. Select multiple lines to indent them together. Press Escape, then Tab to leave the editor.</p>
+            <p id="script-help">Use WHEN conditions and OTHERWISE with one action per rule. Combine conditions with NOT, AND, OR. Use selectors such as ATTACK weakest zombie, items such as USE bandage, and memory such as MOVE_TO home. Open the Wiki for the full command reference. Changes last until restart or refresh. For zombies, use WHEN survivorNearby with CHASE survivor, then OTHERWISE with WANDER. Add a range after either nearby condition, such as WHEN zombieNearby 10 or WHEN survivorNearby 8; omit it for the default of 5 tiles. Zombies also support MOVE, EXPLORE, WAIT, and health conditions.</p>
+          </section>
+        </div>
+        <aside aria-label="Simulation controls and status">
+          <section class="status-panel" aria-labelledby="status-heading">
+            <h2 id="status-heading">Survivor status</h2>
+            <p id="stats"></p>
+            <p class="status-label">Latest action</p>
+            <p id="status" role="status"></p>
+            <p class="status-label">Items underfoot</p>
+            <p id="floor-items">No items on this tile.</p>
+            <p class="status-label">Inventory</p>
+            <p id="inventory">0/5: Empty</p>
+          </section>
+          <button id="pause" type="button">Pause</button>
+          <button id="step" type="button" disabled>Step</button>
+          <button id="stop" type="button">Stop</button>
+          <button id="restart" type="button">Restart</button>
+          <ul aria-label="Map legend">
+            <li><span class="swatch" style="background:#a38c70"></span>F ? Decorative furniture (not searchable)</li>
+            <li>Dark tiles: unexplored</li>
+            <li>Gray tiles: explored, outside current sight</li>
+            <li>Light tiles: currently visible</li>
+            <li><span class="swatch" style="background:#f06464"></span>Red edge: current vision boundary</li>
+            <li><span class="swatch" style="background:#454b53"></span>Road</li>
+            <li><span class="swatch" style="background:#b594d6"></span>V ? Car body (C end is searchable)</li>
+            <li><span class="swatch" style="background:#638271"></span>Open door</li>
+            <li><span class="swatch" style="background:#b594d6"></span>C · Container</li>
+            <li><span class="swatch" style="background:#f1d878"></span>* · Floor items</li>
+            <li><span class="swatch" style="background:#79e5ab"></span>S · Survivor</li>
+            <li><span class="swatch" style="background:#ef7777"></span>Z · Zombie</li>
+            <li><span class="swatch" style="background:#172823"></span>Open ground</li>
+            <li><span class="swatch" style="background:#88949e"></span>Building wall</li>
+            <li><span class="swatch" style="background:#39464f"></span>Building floor</li>
+            <li><span class="swatch" style="background:#d4a653"></span>Closed door</li>
+          </ul>
+          <p>Survivor sight: 8 tiles, blocked by walls and closed doors. Revealed terrain stays visible; entities require current sight. The simulation runs until stopped. Pause to step through individual updates, Stop to cancel, or Restart to begin again.</p>
+        </aside>
+      </div>
+      <noscript>Enable JavaScript to run the simulation.</noscript>
+    </main>
+    <script type="module" src="/dist/main.js"></script>
+  </body>
+</html>

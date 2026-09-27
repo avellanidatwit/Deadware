@@ -1,3 +1,6 @@
+import { drawWorld } from "../dist/ui/worldRenderer.js";
+import { Survivor } from "../dist/entities/survivor.js";
+import { Zombie } from "../dist/entities/zombie.js";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { Grid } from "../dist/world/grid.js";
@@ -88,6 +91,29 @@ test("fleeing turns along the top edge, continues forward, and prioritizes safet
     for (const [x, y] of [[8, 0], [10, 0], [9, 1]]) grid.getCell(x, y).tileType = "buildingWall";
     moveUpdate();
     assert.deepEqual([survivor.x, survivor.y], [9, 0]);
+
+    const map = new Grid(30, 3), observer = new Survivor("observer", 1, 1);
+    map.addEntity(observer);
+    observer.updateVision(map);
+    map.moveEntity(observer, 12, 1);
+    observer.updateVision(map);
+    map.addEntity(new Zombie("hidden", 1, 1));
+    map.getCell(1, 1).items.push({ type: "food" });
+    const fills = [], labels = [];
+    const painter = {
+      fillRect(x, y, width, height) { fills.push({ x, y, width, height, color: this.fillStyle }); },
+      strokeRect() {},
+      fillText(label) { labels.push(label); },
+    };
+    drawWorld(painter, map, observer);
+    const terrain = (x, y) => fills.find(rect => rect.x === x * 16 && rect.y === y * 16 && rect.width === 16 && rect.height === 16).color;
+    assert.equal(terrain(1, 1), "#303436", "remembered terrain is gray");
+    assert.equal(terrain(12, 1), "#385849", "visible terrain is light");
+    assert.equal(terrain(29, 1), "#080c0d", "unexplored terrain is dark");
+    assert.ok(!labels.includes("Z") && !labels.includes("*"), "hidden entities and loot stay hidden");
+    const outline = fills.filter(rect => rect.color === "#f06464");
+    assert.ok(outline.length > 0);
+    assert.ok(!outline.some(rect => rect.x === 12 * 16 && rect.y === 16), "no outline between adjacent visible tiles");
   } finally {
     Grid.prototype.addEntity = originalAdd;
     Math.random = originalRandom;

@@ -1,3 +1,5 @@
+import { survivorCode } from "./data/survivorProgram.js";
+import { drawWorld } from "./ui/worldRenderer.js";
 import { runZombieTick } from "./scripting/zombieScript.js";
 import { generateCity } from "./world/city.js";
 
@@ -20,34 +22,6 @@ const { grid } = city;
 // ======================================================
 // SURVIVOR PROGRAM
 // ======================================================
-
-const survivorCode = 
-`WHEN health < 40 AND hasItem bandage
-    USE bandage
-
-WHEN thirsty AND hasItem water
-    USE water
-
-WHEN hungry AND hasItem food
-    EAT food
-
-WHEN zombieNearby 1
-    ATTACK zombie
-    
-WHEN zombieNearby 6
-    MOVE_AWAY zombie
-
-WHEN itemsOnFloor AND inventorySpace
-    PICK_UP items
-
-WHEN containerNearby
-    SEARCH container
-
-WHEN containerNearby 10
-    MOVE_TO container
-
-OTHERWISE
-    EXPLORE`;
 
 // ======================================================
 // CREATE SURVIVOR
@@ -184,30 +158,7 @@ scriptEditor.addEventListener("keydown", event => {
 
 function render(): void {
   survivor.updateVision(grid);
-  const colors = { road: "#454b53", empty: "#172823", buildingWall: "#88949e", buildingFloor: "#39464f", door: "#d4a653", openDoor: "#638271" };
-  ctx.font = "bold 12px monospace";
-  ctx.textAlign = "center";
-  ctx.textBaseline = "middle";
-  for (let y = 0; y < grid.height; y++) for (let x = 0; x < grid.width; x++) {
-    const cell = grid.getCell(x, y)!;
-    ctx.fillStyle = colors[cell.tileType];
-    ctx.fillRect(x * 16, y * 16, 16, 16);
-    ctx.strokeStyle = "#263830";
-    ctx.lineWidth = 0.5;
-    ctx.strokeRect(x * 16, y * 16, 16, 16);
-    if (survivor.canSee(x, y) && cell.items.length) { ctx.fillStyle = "#f1d878"; ctx.fillText("*", x * 16 + 8, y * 16 + 8); }
-    cell.entities.filter(entity => entity === survivor || survivor.canSee(x, y)).forEach((entity, index) => {
-      const width = 16 / cell.entities.length;
-      ctx.fillStyle = entity.symbol === "S" ? "#79e5ab" : entity.symbol === "F" ? "#a38c70" : entity.symbol === "C" ? "#b594d6" : "#ef7777";
-      ctx.fillRect(x * 16 + index * width + 1, y * 16 + 1, width - 2, 14);
-      ctx.fillStyle = "#101719";
-      ctx.fillText("name" in entity && entity.name === "Car" ? "V" : entity.symbol, x * 16 + (index + 0.5) * width, y * 16 + 8, width);
-    });
-    if (!survivor.hasExplored(x, y)) {
-      ctx.fillStyle = "rgba(0, 0, 0, 0.85)";
-      ctx.fillRect(x * 16, y * 16, 16, 16);
-    }
-  }
+  drawWorld(ctx, grid, survivor);
   stats.textContent = `Tick ${tick} | Position (${survivor.x}, ${survivor.y}) | Health ${survivor.health}/${survivor.maxHealth} | Hunger ${Math.floor(survivor.hunger)} | Thirst ${Math.floor(survivor.thirst)} | Stamina ${survivor.stamina} | Ammo ${survivor.ammo}`;
   canvas.setAttribute("aria-label", `Full ${grid.width} by ${grid.height} world. ${stats.textContent}`);
   document.querySelector("#floor-items")!.textContent = survivor.lookAtFloor(grid).map(item => `${item.name} (${item.type})`).join(", ") || "No items on this tile.";
