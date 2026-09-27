@@ -4,6 +4,7 @@ export class Zombie implements GridEntity {
   public readonly symbol = "Z";
 
   public health = 100;
+  public kills = 0;
   public maxHealth = 100;
   public detectionRange = 5;
 

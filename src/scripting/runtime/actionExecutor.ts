@@ -11,8 +11,6 @@ import type { Target } from "../language/selectors.js";
 export const offsets: Record<Direction, Position> = {
   north: { x: 0, y: -1 }, south: { x: 0, y: 1 }, east: { x: 1, y: 0 }, west: { x: -1, y: 0 },
 };
-const fleeHistory = new WeakMap<Survivor, { from: Position; to: Position; direction: Direction; tick?: number }>();
-const patrols = new WeakMap<Survivor, { destination: string; returning: boolean }>();
 
 /** Pathfinding is limited to terrain this survivor has revealed. */
 function approach(context: ScriptContext, target: Position, adjacent: boolean): boolean {
@@ -45,7 +43,7 @@ function flee(context: ScriptContext, target: Position): boolean {
   if (!moves.length) return false;
   const safest = Math.max(...moves.map(move => spatialDistance(move, target)));
   let candidates = moves.filter(move => spatialDistance(move, target) === safest);
-  const previous = fleeHistory.get(survivor);
+  const previous = survivor.fleeHistory;
   if (previous && previous.to.x === survivor.x && previous.to.y === survivor.y &&
       (context.tick === undefined || previous.tick === context.tick - 2)) {
     const forward = candidates.filter(move => move.x !== previous.from.x || move.y !== previous.from.y);
@@ -56,7 +54,7 @@ function flee(context: ScriptContext, target: Position): boolean {
   const best = candidates[Math.floor(Math.random() * candidates.length)];
   const from = { x: survivor.x, y: survivor.y };
   if (!grid.moveEntity(survivor, best.x, best.y)) return false;
-  fleeHistory.set(survivor, { from, to: best, direction: best.direction, tick: context.tick });
+  survivor.fleeHistory = { from, to: best, direction: best.direction, tick: context.tick };
   return true;
 }
 
@@ -71,8 +69,8 @@ function targeted(verb: string, target: Target, context: ScriptContext): boolean
     const home = survivor.memory.home;
     if (!home) return false;
     const destination = `${resolved.x},${resolved.y}`;
-    let state = patrols.get(survivor);
-    if (!state || state.destination !== destination) { state = { destination, returning: false }; patrols.set(survivor, state); }
+    let state = survivor.patrolState;
+    if (!state || state.destination !== destination) { state = { destination, returning: false }; survivor.patrolState = state; }
     let goal = state.returning ? home : resolved;
     if (spatialDistance(survivor, goal) === 0) { state.returning = !state.returning; goal = state.returning ? home : resolved; }
     return approach(context, goal, false);
@@ -96,7 +94,7 @@ function targeted(verb: string, target: Target, context: ScriptContext): boolean
       survivor.ammo--;
     }
     resolved.takeDamage(verb === "SHOOT" ? 40 : survivor.equippedItem?.type === "weapon" ? 40 : 25);
-    if (!resolved.isAlive()) grid.removeEntity(resolved.id);
+    if (!resolved.isAlive()) { survivor.kills++; grid.removeEntity(resolved.id); }
     return true;
   }
   return false;

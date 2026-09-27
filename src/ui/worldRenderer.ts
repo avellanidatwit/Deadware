@@ -12,7 +12,7 @@ const rememberedColors: Record<TileType, string> = {
 const tileSize = 16;
 
 /** Terrain stays remembered; entities and loose loot require current sight. */
-export function drawWorld(ctx: CanvasRenderingContext2D, grid: Grid, survivor: Survivor): void {
+export function drawWorld(ctx: CanvasRenderingContext2D, grid: Pick<Grid, "width" | "height" | "getCell">, survivor: Pick<Survivor, "canSee" | "hasExplored">): void {
   ctx.font = "bold 12px monospace";
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
@@ -29,7 +29,7 @@ export function drawWorld(ctx: CanvasRenderingContext2D, grid: Grid, survivor: S
       ctx.fillStyle = "#f1d878";
       ctx.fillText("*", px + 8, py + 8);
     }
-    const entities = cell.entities.filter(entity => entity === survivor || visible);
+    const entities = cell.entities.filter(entity => visible);
     entities.forEach((entity, index) => {
       const width = tileSize / entities.length;
       ctx.fillStyle = entity.symbol === "S" ? "#79e5ab" : entity.symbol === "F" ? "#a38c70" : entity.symbol === "C" ? "#b594d6" : "#ef7777";

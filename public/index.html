@@ -1,71 +1,93 @@
-<!doctype html>
+﻿<!doctype html>
 <html lang="en">
-  <head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Deadware</title>
-    <link rel="stylesheet" href="/site.css">
-    <link rel="stylesheet" href="/game.css">
-  </head>
-  <body>
-    <a class="skip-link" href="#main-content">Skip to content</a><header class="site-header"><a class="brand" href="/">DEADWARE<span>Program. Adapt. Survive.</span></a><nav aria-label="Main navigation"><a href="/" aria-current="page">Game</a><a href="/wiki">Wiki</a><a href="/tutorial">Tutorial</a><a href="/account">Account</a></nav></header>
-    <main id="main-content">
-      <h1>DEADWARE</h1>
-      <p id="world-size">World simulation</p>
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Deadware</title><link rel="stylesheet" href="./site.css"><link rel="stylesheet" href="./game.css">
+</head>
+<body>
+  <a class="skip-link" href="#main-content">Skip to content</a>
+  <header class="site-header"><a class="brand" href="./">DEADWARE<span>Program. Adapt. Survive.</span></a><nav aria-label="Main navigation"><a href="./" aria-current="page">Game</a><a href="./wiki.html">Wiki</a><a href="./tutorial.html">Tutorial</a><a href="./account.html">Account</a></nav></header>
+  <main id="main-content">
+    <section id="login-page" class="status-panel login-panel" aria-labelledby="login-heading">
+      <p class="eyebrow">Welcome back</p><h1 id="login-heading">Log in to Deadware</h1>
+      <p>Your world keeps running. Log in to see how your survivors and zombies are doing.</p>
+      <form id="login-form">
+        <label for="email">Email</label><input id="email" name="email" type="email" autocomplete="username" maxlength="254" required>
+        <label for="password">Password</label><input id="password" name="password" type="password" autocomplete="current-password" maxlength="128" required>
+        <details><summary>Server connection</summary><label for="server-url">Server URL</label><input id="server-url" type="url" required></details>
+        <button id="login" type="submit">Log in</button><p id="login-feedback" role="status" aria-live="polite"></p>
+      </form>
+      <p>Use the email and password provided by your server operator.</p>
+    </section>
+    <section id="viewer-page" hidden aria-labelledby="viewer-heading">
+      <div class="viewer-header"><div><h1 id="viewer-heading">Your world</h1><p id="signed-in-email"></p></div><button id="logout" type="button">Log out</button></div>
+      <nav class="workspace-tabs" aria-label="Workspace"><button id="world-tab" type="button" aria-pressed="true" aria-controls="world-panel">World view</button><button id="programming-tab" type="button" aria-pressed="false" aria-controls="programming-panel">Programming</button></nav><div id="world-panel"><div class="status-panel view-toolbar"><div><label for="view-entity">View one of your entities</label><select id="view-entity" disabled></select></div><p id="connection-status" role="status">Loading your world...</p></div>
+      <p id="world-size"></p>
       <div class="layout">
         <div class="world-column">
-          <canvas id="world" role="img" aria-label="Simulation grid">Your browser needs canvas support to display the world.</canvas>
-          <section class="script-panel" aria-labelledby="script-heading">
-            <h2 id="script-heading">SurvivorScript editor</h2>
-            <label for="script-entity">Entity</label>
-            <select id="script-entity"></select>
-            <label for="script-code">Script</label>
-            <textarea id="script-code" rows="14" spellcheck="false" autocapitalize="off" aria-describedby="script-help script-feedback"></textarea>
-            <button id="apply-script" type="button">Apply script</button>
-            <p id="script-feedback" role="status">Apply changes to use this script on the next update.</p>
-            <p><a href="/wiki#command-reference" target="_blank" rel="noopener">View commands in the Wiki (new tab)</a></p>
-            <p>Tab indents four spaces; Shift+Tab unindents. Select multiple lines to indent them together. Press Escape, then Tab to leave the editor.</p>
-            <p id="script-help">Use WHEN conditions and OTHERWISE with one action per rule. Combine conditions with NOT, AND, OR. Use selectors such as ATTACK weakest zombie, items such as USE bandage, and memory such as MOVE_TO home. Open the Wiki for the full command reference. Changes last until restart or refresh. For zombies, use WHEN survivorNearby with CHASE survivor, then OTHERWISE with WANDER. Add a range after either nearby condition, such as WHEN zombieNearby 10 or WHEN survivorNearby 8; omit it for the default of 5 tiles. Zombies also support MOVE, EXPLORE, WAIT, and health conditions.</p>
-          </section>
+          <p id="empty-state" hidden>You have no survivors or zombies yet. Open Programming to create your first survivor.</p>
+          <canvas id="world" tabindex="0" aria-describedby="tile-description" role="img" aria-label="World grid">Your browser needs canvas support to display the world.</canvas>
+          <section class="map-inspector" aria-labelledby="tile-heading"><div class="inspector-topline"><span class="eyebrow">Tile information</span><span id="tile-coordinate"></span></div><h2 id="tile-heading">Inspect the world</h2><p id="tile-description">Hover over the map to inspect a tile.</p><div id="tile-contents"></div></section><p id="sight"></p><p>This is a live, view-only screen. Your entities act on the server while you watch.</p>
         </div>
-        <aside aria-label="Simulation controls and status">
-          <section class="status-panel" aria-labelledby="status-heading">
-            <h2 id="status-heading">Survivor status</h2>
-            <p id="stats"></p>
-            <p class="status-label">Latest action</p>
-            <p id="status" role="status"></p>
-            <p class="status-label">Items underfoot</p>
-            <p id="floor-items">No items on this tile.</p>
-            <p class="status-label">Inventory</p>
-            <p id="inventory">0/5: Empty</p>
+        <aside aria-label="Entity status and grid key">
+          <section class="status-panel entity-card" aria-labelledby="status-heading">
+            <div class="identity-row"><span id="entity-avatar" class="entity-avatar" aria-hidden="true">S</span><div class="identity-copy"><span id="entity-type" class="eyebrow">Survivor</span><h2 id="status-heading">Select an entity</h2><p id="owner-name"></p></div><span id="life-state" class="life-badge">Waiting</span></div>
+            <dl id="entity-facts" class="entity-facts" title="Time alive is simulation time; it excludes server downtime."></dl>
+            <div id="stats" class="stat-bars"></div>
+            <div id="survivor-details" hidden>
+              <div id="needs" class="stat-bars"></div><p class="needs-hint">Lower hunger and thirst are better.</p>
+              <div class="inventory-heading"><h3>Inventory</h3><span id="inventory-count"></span></div>
+              <ul id="inventory" class="inventory-grid" aria-label="Inventory slots"></ul>
+              <div class="ammo-row"><span>Loaded ammunition</span><strong id="ammo-count"></strong></div>
+              <p class="status-label">On this tile</p><div id="floor-items" class="floor-items"></div>
+            </div>
+            <div class="activity-strip"><span class="status-label">Latest activity</span><p id="status"></p></div>
           </section>
-          <button id="pause" type="button">Pause</button>
-          <button id="step" type="button" disabled>Step</button>
-          <button id="stop" type="button">Stop</button>
-          <button id="restart" type="button">Restart</button>
-          <ul aria-label="Map legend">
-            <li><span class="swatch" style="background:#a38c70"></span>F ? Decorative furniture (not searchable)</li>
-            <li>Dark tiles: unexplored</li>
-            <li>Gray tiles: explored, outside current sight</li>
-            <li>Light tiles: currently visible</li>
-            <li><span class="swatch" style="background:#f06464"></span>Red edge: current vision boundary</li>
-            <li><span class="swatch" style="background:#454b53"></span>Road</li>
-            <li><span class="swatch" style="background:#b594d6"></span>V ? Car body (C end is searchable)</li>
-            <li><span class="swatch" style="background:#638271"></span>Open door</li>
-            <li><span class="swatch" style="background:#b594d6"></span>C · Container</li>
-            <li><span class="swatch" style="background:#f1d878"></span>* · Floor items</li>
-            <li><span class="swatch" style="background:#79e5ab"></span>S · Survivor</li>
-            <li><span class="swatch" style="background:#ef7777"></span>Z · Zombie</li>
-            <li><span class="swatch" style="background:#172823"></span>Open ground</li>
-            <li><span class="swatch" style="background:#88949e"></span>Building wall</li>
-            <li><span class="swatch" style="background:#39464f"></span>Building floor</li>
-            <li><span class="swatch" style="background:#d4a653"></span>Closed door</li>
-          </ul>
-          <p>Survivor sight: 8 tiles, blocked by walls and closed doors. Revealed terrain stays visible; entities require current sight. The simulation runs until stopped. Pause to step through individual updates, Stop to cancel, or Restart to begin again.</p>
+          <section class="status-panel" aria-labelledby="key-heading"><h2 id="key-heading">Grid key</h2><ul aria-label="Map legend">
+            <li><span class="swatch" style="background:#79e5ab"></span>S - Survivor</li>
+            <li><span class="swatch" style="background:#ef7777"></span>Z - Zombie</li>
+            <li><span class="swatch" style="background:#b594d6"></span>C - Container / car trunk</li>
+            <li><span class="swatch" style="background:#ef7777"></span>V - Car body</li>
+            <li><span class="swatch" style="background:#a38c70"></span>F - Furniture</li>
+            <li><span class="swatch" style="background:#f1d878"></span>* - Floor items</li>
+            <li><span class="swatch" style="background:#68717c"></span>Road</li>
+            <li><span class="swatch" style="background:#385849"></span>Open ground</li>
+            <li><span class="swatch" style="background:#acbac6"></span>Building wall</li>
+            <li><span class="swatch" style="background:#657986"></span>Building floor</li>
+            <li><span class="swatch" style="background:#e6bd65"></span>Closed door</li>
+            <li><span class="swatch" style="background:#8ab39b"></span>Open door</li>
+            <li><span class="swatch" style="background:#080c0d"></span>Unexplored</li>
+            <li><span class="swatch" style="background:#41464a"></span>Gray - Explored, out of sight</li>
+            <li><span class="swatch" style="background:#f06464"></span>Red edge - Sight boundary</li>
+          </ul></section>
         </aside>
       </div>
-      <noscript>Enable JavaScript to run the simulation.</noscript>
-    </main>
-    <script type="module" src="/dist/main.js"></script>
-  </body>
+      </div>
+      <section id="programming-panel" hidden aria-labelledby="programming-heading">
+        <h2 id="programming-heading">Survivor programming</h2>
+        <p>Create a survivor with two programs: one for life, one for when it rises as a zombie. Zombies cannot be injected directly.</p>
+        <div class="status-panel"><label for="program-entity">Create or reprogram an active entity</label><select id="program-entity"><option value="">Create a survivor</option></select><button id="refresh-programming" type="button">Refresh active entities and library</button><p id="queue-status"></p></div>
+        <div class="programming-layout">
+          <section class="script-panel" aria-label="Program editor">
+            <label for="survivor-name">Survivor name</label><input id="survivor-name" maxlength="64" value="New survivor">
+            <label id="primary-script-label" for="survivor-script">Survivor behavior</label><textarea id="survivor-script" rows="16" spellcheck="false" autocapitalize="off"></textarea>
+            <div id="future-zombie-panel"><label for="zombie-script">Zombie behavior after death</label><textarea id="zombie-script" rows="10" spellcheck="false" autocapitalize="off"></textarea><p>You can update this program while the survivor lives. After death, select its zombie to update the zombie's behavior.</p></div>
+            <button id="inject-survivor" type="button">Inject survivor</button><button id="deploy-program" type="button" hidden>Update behavior</button>
+            <p id="program-feedback" role="status" aria-live="polite"></p>
+            <label for="script-name">Library name</label><input id="script-name" maxlength="64" placeholder="Scavenger strategy"><button id="save-program" type="button">Save survivor and zombie scripts</button>
+            <p><a href="./wiki.html" target="_blank" rel="noopener">SurvivorScript reference</a></p>
+          </section>
+          <section class="status-panel" aria-labelledby="library-heading"><h3 id="library-heading">Saved scripts</h3><p>Saved programs are independent of entities. A survivor's final programs are also archived automatically when it dies.</p>
+            <label for="saved-script">Your saved programs and death archives</label><select id="saved-script"></select>
+            <label for="saved-survivor-code">Saved survivor script</label><textarea id="saved-survivor-code" rows="12" readonly></textarea>
+            <label for="saved-zombie-code">Saved zombie script</label><textarea id="saved-zombie-code" rows="8" readonly></textarea>
+            <button id="load-program" type="button" disabled>Use scripts for a new survivor</button>
+          </section>
+        </div>
+      </section>
+    </section>
+    <noscript>Enable JavaScript to log in and view your entities.</noscript>
+  </main>
+  <script type="module" src="./dist/main.js"></script>
+</body>
 </html>

@@ -8,12 +8,16 @@ export class Survivor implements GridEntity {
   public readonly symbol = "S";
 
   public health = 100;
+  public kills = 0;
   public maxHealth = 100;
   public hunger = 0;
   public thirst = 0;
   public stamina = 100;
   public ammo = 0;
   public equippedItemId?: string;
+  /** Runtime navigation state is part of the persistent entity, not process-local caches. */
+  public fleeHistory?: { from: { x: number; y: number }; to: { x: number; y: number }; direction: string; tick?: number };
+  public patrolState?: { destination: string; returning: boolean };
   /** Position snapshots never track unseen entities. */
   readonly memory: Partial<Record<MemorySlot, { x: number; y: number }>> = {};
   get equippedItem(): Item | undefined { return this.inventory.find(item => item.id === this.equippedItemId); }

@@ -1,7 +1,7 @@
-<!doctype html>
-<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Tutorial | Deadware</title><link rel="stylesheet" href="/site.css"></head><body class="reading-page"><a class="skip-link" href="#main-content">Skip to content</a><header class="site-header"><a class="brand" href="/">DEADWARE<span>Program. Adapt. Survive.</span></a><nav aria-label="Main navigation"><a href="/">Game</a><a href="/wiki">Wiki</a><a href="/tutorial" aria-current="page">Tutorial</a><a href="/account">Account</a></nav></header><main id="main-content"><div class="page-heading"><p class="eyebrow">Getting started / 02</p><h1>Your first survivor program</h1><p>Write a rule. Watch a decision. Adapt your strategy.</p></div>
-<article class="guide"><section><h2>1. Pause and observe</h2><p>Open the Game and press Pause. Find your survivor, check their health, and look for nearby zombies. Step advances the world one update at a time.</p></section>
-<section><h2>2. Write a priority list</h2><p>Select the survivor in the editor and try this script. This script approaches visible closed doors, opens them, and explores the revealed interior. It only scavenges when inventory has space. Each condition has one action underneath it. The first matching rule wins.</p><pre><code>WHEN health &lt; 40 AND hasItem bandage
+﻿<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Tutorial | Deadware</title><link rel="stylesheet" href="./site.css"></head><body class="reading-page"><a class="skip-link" href="#main-content">Skip to content</a><header class="site-header"><a class="brand" href="./">DEADWARE<span>Program. Adapt. Survive.</span></a><nav aria-label="Main navigation"><a href="./">Game</a><a href="./wiki.html">Wiki</a><a href="./tutorial.html" aria-current="page">Tutorial</a><a href="./account.html">Account</a></nav></header><main id="main-content"><div class="page-heading"><p class="eyebrow">Getting started / 02</p><h1>Your first survivor program</h1><p>Write a rule. Watch a decision. Adapt your strategy.</p></div>
+<article class="guide"><section><h2>1. Connect and observe</h2><p>Open the Game and log in with your email and password. Use the dropdown to switch between your survivors and zombies. Check the selected entity status and use the grid key to read the map. The server keeps running while you observe.</p></section>
+<section><h2>2. Write a priority list</h2><p>Open the Programming tab and choose Create a survivor. Name it, write its survivor script and prepare its zombie behavior. You can save both scripts to your library before injecting it. The example below explains how a survivor program works. This script approaches visible closed doors, opens them, and explores the revealed interior. It only scavenges when inventory has space. Each condition has one action underneath it. The first matching rule wins.</p><pre><code>WHEN health &lt; 40 AND hasItem bandage
     USE bandage
 
 WHEN zombieNearby 1
@@ -36,7 +36,7 @@ WHEN distance nearest door &gt; 1
 
 OTHERWISE
     EXPLORE</code></pre></section>
-<section><h2>3. Apply, then step</h2><p>Press Apply script, then Step. Read Latest action to see what happened. Survivor movement happens every second update; on other updates the script can select a later interaction. A failed action still takes an update.</p></section>
+<section><h2>3. Deploy and observe</h2><p>Press Inject survivor to queue a new survivor at a random free location, or select an active entity and press Update behavior. Return to World view to observe it. When a survivor dies, it rises at its corpse using its zombie program; its scripts are archived in your library. Zombies cannot be injected directly. Survivor movement happens every second update; on other updates the script can select a later interaction. A failed action still takes an update.</p></section>
 <section><h2>4. Give needs a priority</h2><p>The starter script places these rules above exploration and scavenging. Your survivor needs to find and carry the matching items first.</p><pre><code>WHEN health &lt; 40 AND hasItem bandage
     USE bandage
 
@@ -44,5 +44,5 @@ WHEN thirsty AND hasItem water
     USE water
 
 WHEN hungry AND hasItem food
-    EAT food</code></pre><p>Use the Wiki to explore equipment, target selectors, memory, and Boolean conditions. Scripts and world state currently last only for the current game page session.</p></section>
-<p><a class="button-link" href="/">Open Game</a> <a class="text-link" href="/wiki">Read the command reference &rarr;</a></p></article></main></body></html>
+    EAT food</code></pre><p>Use the Wiki to explore equipment, target selectors, memory, and Boolean conditions. Deployed scripts and world state persist on the server across browser refreshes and server restarts.</p></section>
+<p><a class="button-link" href="./">Open Game</a> <a class="text-link" href="./wiki.html">Read the command reference &rarr;</a></p></article></main></body></html>

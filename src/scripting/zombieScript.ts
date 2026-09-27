@@ -25,7 +25,7 @@ export function runZombieTick(zombie: Zombie, program: SurvivorProgram, grid: Gr
     const target = findNearestSurvivor(zombie, survivors, grid, 1);
     if (target) {
       target.takeDamage(20);
-      if (!target.isAlive()) grid.removeEntity(target.id);
+      if (!target.isAlive()) { zombie.kills++; grid.removeEntity(target.id); }
     }
     return;
   }
