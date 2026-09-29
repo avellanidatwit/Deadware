@@ -1,5 +1,5 @@
-﻿import type { Item } from '../entities/item.js';
-import type { PublicActor, ViewCell, WorldSnapshot } from './protocol.js';
+import type { Item } from '../../../shared/src/types/world.js';
+import type { PublicActor, ViewCell, WorldSnapshot } from '../../../shared/src/types/world.js';
 
 const get = <T extends HTMLElement>(id: string) => document.querySelector<T>(id)!;
 function node<K extends keyof HTMLElementTagNameMap>(tag: K, className = '', text = ''): HTMLElementTagNameMap[K] {

@@ -4,3 +4,7 @@ dist/
 
 data/
 web-dist/
+.env
+.env.*
+!.env.example
+!client/.env.example

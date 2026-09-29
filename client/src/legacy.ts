@@ -1,6 +1,6 @@
-﻿import { renderStatus, setupInspector } from './ui/entityDetails.js';
+import { renderStatus, setupInspector } from './ui/entityDetails.js';
 import { drawWorld } from './ui/worldRenderer.js';
-import type { WorldSnapshot } from './ui/protocol.js';
+import type { WorldSnapshot } from '../../shared/src/types/world.js';
 import { setupProgramming } from './ui/programming.js';
 
 const get = <T extends HTMLElement>(id: string) => document.querySelector<T>(id)!;

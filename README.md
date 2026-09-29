@@ -1,78 +1,87 @@
-﻿# Deadware
+# Deadware
 
-Deadware is a persistent zombie apocalypse simulation. Players deploy SurvivorScript programs into a world that runs on an authoritative server. The browser observes snapshots and submits requests; it never simulates entities.
+An authoritative zombie simulation with SurvivorScript behavior, a React/Vite console, and self-hosted PostgreSQL. The browser sends validated requests and sees only permitted snapshots; all game logic runs on the server.
 
 ## Run locally
 
-Requires Node.js 24 or newer. Run `npm install`, then `npm start` and open http://localhost:3000. The starting page asks for email and password. When no login accounts exist, the server creates `operator@deadware.local` and prints its randomly generated password once. Save it and use it to log in. New worlds have no pre-seeded survivors or zombies. Existing accounts and player-created survivors are preserved.
+Requires Node.js 24+ and Docker Compose (or a local PostgreSQL 17 installation).
 
-After login, the client shows a view-only page with a dropdown grouped into My survivors and My zombies. Selecting an entity changes the grid perspective and status block. Only owned entities can be selected; other actors can still appear within their sight. The grid key explains colors and symbols. Survivors retain explored terrain; zombies show current sight. Accounts without entities see an empty state. Open the separate Programming tab to create survivors, edit active entities, and manage your saved script library.
+1. Run `npm install` (PowerShell can use `npm.cmd`).
+2. Copy `.env.example` to `.env`. Set different random passwords for `DATABASE_PASSWORD`, `MIGRATION_PASSWORD`, and `POSTGRES_PASSWORD`. Set `SESSION_SECRET` to at least 32 random characters. Generate each value with `node -e "console.log(require('node:crypto').randomBytes(32).toString('hex'))"`.
+3. Run `docker compose up -d --wait database`.
+4. Run `npm run db:migrate`.
+5. Run `npm start`, then `npm run dev:client` in another terminal.
+6. Open **http://localhost:5173**, register, and inject a survivor with living and future zombie programs.
 
-The server ticks every 100 ms. Actors decide every 600 ms; survivor movement is available every second decision. The browser polls once per second. Logout revokes the session. Sessions expire after 12 hours, remain only in browser memory, and require a fresh login after refresh. Passwords use salted scrypt hashes; session tokens are hashed in SQLite.
-World state, entity ownership, scripts, inventory, memory, terrain, loot, exploration and pending injections are saved in `data/world.sqlite`. Saves commit after every decision and accepted mutation, plus graceful shutdown. Refreshing or closing a browser does not stop the world. Restarting the server restores it. Server downtime is not simulated, and an abrupt crash can lose work since the last committed decision. A persistence failure halts the simulation and API rather than acknowledging unsaved changes. Keep the database on a persistent volume and run one server process per database.
+The API binds to `127.0.0.1:3000`; PostgreSQL binds to `127.0.0.1:5432`. There is no default PostgreSQL player/password. Compose initialization runs only for a new volume. Editing `.env` does not rotate existing database role passwords.
 
+The migration account owns the schema; the application account has data access without schema privileges. For an existing PostgreSQL installation, provision roles using [init.sh](server/database/init.sh) before migrations. Keep PostgreSQL local/private and never run the application as its superuser.
 
+## Repository structure
 
-The status card shows the entity and owner names, health and needs bars, lifetime/kills, and five inventory slots with item categories and an equipped marker. Hover over the map for terrain descriptions and visible occupant details; tapping or using arrow keys on the focused grid also works. Public occupant details are limited to name, type, owner display name, health, kills, and time alive. Inventories, needs, ammunition, memory, and programs are never included in public hover data. Explored tiles outside sight show terrain only; unexplored tiles reveal nothing.
+| Path | Responsibility |
+| --- | --- |
+| `client/src/main.tsx` | React login, survivor dashboard, editor and world viewer |
+| `client/src/api/` | Credentialed HTTP requests |
+| `client/src/ui/` | Preserved renderer and legacy UI modules |
+| `shared/src/types/` | Public API/world types independent of server models |
+| `server/src/api/` | Authentication, sessions, validation and ownership |
+| `server/src/database/` | PostgreSQL connection, migrations and repositories |
+| `server/src/simulation/` | Serialized tick/mutation/checkpoint coordination |
+| `server/src/world.mjs` | Existing world manager and versioned save codec |
+| `server/src/world/`, `entities/`, `data/` | Preserved simulation systems |
+| `server/src/scripting/` | Existing parser, runtime and language modules |
 
-Kills are credited to the actor delivering a fatal combat hit. Time alive measures simulation time since injection (or zombie resurrection), stops at death, and excludes server downtime. Both persist across restarts. Old entities whose birth was never recorded show an unknown lifetime; historical kills before tracking began cannot be reconstructed.
+Dependencies and the lockfile are managed at the repository root. The existing world manager remains JavaScript; simulation modules and the new API/database layers are TypeScript.
 
-## Programming and the survivor lifecycle
+## Persistence
 
-In Programming, choose **Create a survivor**, give it a name, and write its survivor behavior and future zombie behavior before pressing **Inject survivor**. The server validates both scripts, queues the survivor, and chooses a uniformly random free walkable tile at injection time. Only survivors can be injected; the API rejects direct zombie creation too.
+Users, sessions, survivors and versioned survivor/zombie script pairs have relational tables. A complete versioned world checkpoint preserves zombies, terrain, loot, inventory, memory, the library and pending injections. Survivor rows and script history commit atomically with that checkpoint; separate tables for the remaining objects are deferred.
 
-Use the same dropdown to select an active owned survivor or a zombie raised from one of your survivors. **Update behavior** updates a survivor's live program and its prepared zombie program together, or an active zombie's current program. A dead survivor cannot be reprogrammed. Refresh the active list to discover queued spawns and newly raised zombies; switching tabs also refreshes it. Drafts are kept while switching between entries within the current login.
+The active world lives in RAM. Configure `SIMULATION_TICK_MS=100`, `DECISION_TICKS=6`, `CLIENT_POLL_MS=1000` and `CHECKPOINT_MS=30000` independently. Survivor movement retains its two-decision cooldown. World tick/decision timing persists and cannot silently change on restart. Database delays pause ticks rather than accumulating a backlog.
 
-After a fatal needs update or attack, the server removes the survivor and raises exactly one zombie at the corpse coordinates, with the same owner and the latest prepared zombie script. The zombie starts acting on the next decision tick. Its origin and the survivor-to-zombie link are persistent, preventing duplicate resurrection after restart. Legacy directly injected zombies cannot be reprogrammed through the new lifecycle workflow.
+Accepted mutations and graceful shutdown also checkpoint. Crashes may lose simulation progress since the last checkpoint; acknowledged mutations have committed. Persistence failure halts operations. An advisory lock prevents multiple server writers. Server downtime is not simulated. Back up PostgreSQL and verify restores in a separate database before upgrades.
 
-**Save survivor and zombie scripts** stores a named pair in your account library independently of the entity. The library lets you read both programs and load them into a new survivor draft. At death, the survivor's final deployed programs are automatically archived there as well. Unsaved local edits still need saving before refresh or logout. Each account can keep 100 manually saved pairs, plus automatic death archives.
+## API and security
 
-On startup, existing saves remove the known prototype IDs `survivor-1`, `zombie-1`, and `building-<number>-zombie`, including their grid references. Player-created survivors, terrain, loot, credentials, and scripts belonging to retained entities remain. Legacy queued zombie injections are dropped. Procedural building zombies are disabled for new persistent worlds.
+Passwords use Argon2id. PostgreSQL-backed sessions use HttpOnly cookies, 12-hour expiry, regeneration on login and invalidation on logout. Production cookies require HTTPS. Authentication work and request rates are bounded. SQL values are parameterized; scripts compile once on deployment/recovery and never execute JavaScript.
 
-## Separate web client / GitHub Pages
+Mutations require the exact `CLIENT_ORIGIN`, JSON and `X-Deadware-Client: web`. Credentialed CORS allows that origin. These server-side checks protect against cross-site form/fetch CSRF. Vite preserves the browser origin through its development proxy. Frontend configuration contains no secrets.
 
-Run `npm run build:client` and publish the contents of `web-dist/` to GitHub Pages or any static host. Links support repository subpaths. This artifact contains only HTML, CSS, and the browser renderer/client modules. GitHub Pages hosts the client, not the simulation server.
-
-Run the Node server on an always-on host with persistent disk. Configure HTTPS using your host or a reverse proxy, then enter that HTTPS endpoint in the Server connection settings on the login page. Set `DEADWARE_ORIGINS` to the exact client origin, for example `https://your-name.github.io` (no repository path). The client also works at the Node server's own origin.
-
-Environment configuration:
-
-- `PORT`: defaults to `3000`.
-- `HOST`: defaults to `127.0.0.1`; set `0.0.0.0` when exposing through your hosting platform.
-- `DEADWARE_DB`: SQLite filename, default `./data/world.sqlite`.
-- `DEADWARE_ORIGINS`: comma-separated allowed browser origins.
-- `DEADWARE_USERS`: optional JSON array of `{ "email": "player@example.com", "password": "a-long-private-password", "owner": "player-one", "displayName": "Riley" }`. Passwords must contain 12-128 characters. Optional `displayName` (1-64 characters) is the public owner label; it defaults to the owner ID and never uses the login email. Use owner `operator` for the initial account or an existing owner ID to retain that user's entities. Logins are created/updated at startup and persist without this setting afterward. Changing a password revokes that owner's sessions. Keep this in private server configuration, never the static build.
-- `DEADWARE_TOKENS`: optional JSON object mapping access tokens of at least 32 characters to owner IDs. For example, map a securely generated token to `operator` for the initial account, and another to `player-two`. Supplying this setting replaces stored credentials at startup, allowing provisioning and rotation. Without it, existing credentials remain valid.
-
-Email/password accounts are provisioned by the operator; legacy API tokens remain supported. Self-service registration, account recovery, historical statistics, and WebSockets are future work. Keep tokens out of the static build and source control. Requests authenticate ownership on the server; clients cannot submit owner IDs, positions, health, inventory, or arbitrary JavaScript.
-
-## API and limits
-
-`POST /api/login` accepts `{ "email": "...", "password": "..." }` and returns a session token. Other `/api/` routes require `Authorization: Bearer <token>`. `POST /api/logout` revokes that session. Login attempts are throttled per connection IP. Mutations require JSON.
-
-| Method | Path | Purpose |
+| Method | Endpoint | Purpose |
 | --- | --- | --- |
-| GET | `/api/world` or `/api/world/region` | Append `?entity=<id>` to view a specific owned survivor or zombie; region aliases the full map |
-| GET | `/api/me` | Authenticated owner ID |
-| GET | `/api/me/entities` | Owned entity programs and status |
-| GET | `/api/survivors`, `/api/zombies` | Owned entities of that type |
-| GET | `/api/survivors/:id`, `/api/zombies/:id` | Owned entity details |
-| POST | `/api/survivors` | Queue `{ "name": "Scout", "script": "OTHERWISE\n    EXPLORE", "zombieScript": "OTHERWISE\n    WANDER" }` |
-| PUT | `/api/survivors/:id/script`, `/api/zombies/:id/script` | Deploy `script`; survivor updates also accept `zombieScript` |
-| GET | `/api/programming` | Active programmable entities, defaults, queue, and saved scripts |
-| GET / POST | `/api/scripts` | List saved programs / save a named `{ name, script, zombieScript }` pair |
+| POST | `/api/auth/register` | `{username, email, password}` |
+| POST | `/api/auth/login` | `{email, password}` |
+| POST | `/api/auth/logout` | Revoke session |
+| GET | `/api/me` | Current account |
+| GET | `/api/survivors`, `/api/me/entities` | Owned entities |
+| GET | `/api/programming` | Active entities, defaults, library, queue |
+| GET | `/api/world?entity=<id>` | Owned entity's perception/explored terrain |
+| POST | `/api/survivors` | Queue `{name, script, zombieScript?}`; server controls spawn/ownership |
+| PUT | `/api/survivors/:id/script` | Deploy `{script, zombieScript?}` after ownership checks |
+| PUT | `/api/zombies/:id/script` | Update an owned resurrected zombie's `{script}` |
+| GET / POST | `/api/scripts` | Read/save named script pairs |
 
-Scripts allow 1–100 rules, at most five condition leaves per rule, one action per rule, 16 KiB of source and 512 characters per line. Memory uses four predefined slots; arbitrary variables and executable JavaScript are unavailable. Invalid syntax reports the source line. Requests are capped at 200 KiB to accommodate two JSON-escaped scripts. Each owner is limited to 100 survivors (including dead survivors and pending requests); their resulting zombies do not consume another survivor slot. The global injection queue is limited to 100. Programs compile once on deployment or recovery, not each tick. The server filters map entities and loot by the survivor's current perception.
+Survivors rise as owned zombies after death; direct zombie injection remains disabled. See [the game/language design](docs/DESIGN.md). WebSockets, password recovery, automatic SQLite import and richer React inspector views are deferred.
 
-## Development
+## GitHub Pages
 
-`npm test` builds TypeScript and tests the language, simulation, rendering, remote client requests, API ownership/validation, injections and restart recovery. `npm run build` compiles TypeScript; restart the server after source changes.
+The [Pages workflow](.github/workflows/deploy-client.yml) builds static React files into `web-dist/` and deploys on pushes to `main` or manual runs. In **Settings ? Pages**, select **GitHub Actions**. Set repository variable `VITE_API_URL` to your future public HTTPS API origin. `VITE_BASE_PATH` defaults to `./` for repository paths and custom domains.
 
-- `server.mjs`: HTTP API, credentials, SQLite persistence and fixed-rate scheduler.
-- `server/world.mjs`: authoritative world manager, snapshot projection, injection queue and versioned save codec.
-- `src/main.ts`, `src/ui/`: remote client and renderer.
-- `src/entities/`, `src/world/`, `src/scripting/`: server simulation and constrained script runtime.
-- `public/`: static Game, Wiki, Tutorial and Account pages.
-- `docs/DESIGN.md`: game, language, server and client specifications.
+For manual builds, copy `client/.env.example` to `client/.env.local`, set the public API URL and run `npm run build:client`. The Node API and PostgreSQL require their own always-on host. These source changes do not provision a live site or server.
 
-See [the design and language specification](docs/DESIGN.md) for gameplay rules and SurvivorScript commands.
+Keep development local. For production, put Caddy/Nginx on the same host in front of `127.0.0.1:3000`, expose HTTPS only, set `NODE_ENV=production` and an exact HTTPS `CLIENT_ORIGIN`. Proxy trust is limited to loopback. Unrelated Pages/API domains need `COOKIE_SAME_SITE=none`; some browsers block third-party cookies. A Pages custom domain and API subdomain under the same site can use `lax`. Test authentication using the actual domains before launch.
+
+References: [Vite Pages deployment](https://vite.dev/guide/static-deploy), [Express sessions](https://expressjs.com/en/resources/middleware/session/), [PostgreSQL transactions in Node](https://node-postgres.com/features/transactions).
+
+## Existing SQLite worlds
+
+`npm run start:legacy` preserves the prior SQLite server, accounts and browser UI at http://localhost:3000, using the relocated simulation code. Existing `data/world.sqlite` is untouched. Its bearer sessions and environment variables are independent of PostgreSQL and the React console. `npm run build:legacy-client` builds the old static UI, replacing `web-dist/`.
+
+The [archived legacy reference](docs/LEGACY.md) describes that UI/API. Substitute `start:legacy` for `start`, and `build:legacy-client` for `build:client` in that document. Account IDs and password hashes differ; no automatic import is attempted.
+
+## Verification
+
+`npm test` builds both TypeScript targets and runs simulation, legacy UI/API, scheduling and configuration tests. `npm run build:client` verifies the static production build.
+
+The PostgreSQL integration test runs when `TEST_DATABASE_URL` points to a **disposable database** with schema-creation privileges. It creates and removes a unique schema, testing migrations, Argon2id authentication, cookies, CSRF, ownership, forbidden fields, script history, expiry and exact recovery. Without the variable, it is explicitly skipped. GitHub Actions supplies PostgreSQL and always runs it.

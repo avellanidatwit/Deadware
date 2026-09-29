@@ -1,16 +1,16 @@
-import { Grid } from '../dist/world/grid.js';
-import { Survivor } from '../dist/entities/survivor.js';
-import { Zombie } from '../dist/entities/zombie.js';
-import { ItemContainer } from '../dist/entities/container.js';
-import { Furniture } from '../dist/entities/furniture.js';
-import { Car } from '../dist/entities/car.js';
-import { generateCity } from '../dist/world/city.js';
-import { survivorCode } from '../dist/data/survivorProgram.js';
-import { parseSurvivorScript, runSurvivorTick } from '../dist/scripting/survivorScript.js';
-import { runZombieTick } from '../dist/scripting/zombieScript.js';
-import { conditionLeaves } from '../dist/scripting/language/conditions.js';
+import { Grid } from './world/grid.js';
+import { Survivor } from './entities/survivor.js';
+import { Zombie } from './entities/zombie.js';
+import { ItemContainer } from './entities/container.js';
+import { Furniture } from './entities/furniture.js';
+import { Car } from './entities/car.js';
+import { generateCity } from './world/city.js';
+import { survivorCode } from './data/survivorProgram.js';
+import { parseSurvivorScript, runSurvivorTick } from './scripting/survivorScript.js';
+import { runZombieTick } from './scripting/zombieScript.js';
+import { conditionLeaves } from './scripting/language/conditions.js';
 import { randomUUID } from 'node:crypto';
-import { hasLineOfSight } from '../dist/world/perception.js';
+import { hasLineOfSight } from './world/perception.js';
 export const defaultZombieScript = new Zombie('default', 0, 0).program;
 
 export function compile(script, kind) {
@@ -132,9 +132,9 @@ export class World {
   }
   advance() {
     const s = this.state;
-    // A server tick is 100 ms; actors decide every sixth tick.
+    const decisionTicks = s.timing?.decisionTicks ?? 6;
     s.tick++;
-    if (s.tick % 6 !== 0) return;
+    if (s.tick % decisionTicks !== 0) return;
     const request = s.queue[0];
     if (request) {
       const positions = [];
@@ -149,7 +149,7 @@ export class World {
         this.programs.set(entity.id, compile(entity.program, request.kind)); s.queue.shift();
       }
     }
-    for (const survivor of s.survivors) s.meta[survivor.id].message = runSurvivorTick(this.programs.get(survivor.id), { survivor, survivors: s.survivors, zombies: s.zombies, grid: s.grid, tick: s.tick / 6 - 1, canMove: s.tick % 12 === 0 }).message;
+    for (const survivor of s.survivors) s.meta[survivor.id].message = runSurvivorTick(this.programs.get(survivor.id), { survivor, survivors: s.survivors, zombies: s.zombies, grid: s.grid, tick: s.tick / decisionTicks - 1, canMove: s.tick % (decisionTicks * 2) === 0 }).message;
     for (const zombie of s.zombies) runZombieTick(zombie, this.programs.get(zombie.id), s.grid, s.survivors, s.zombies);
     this.raiseDead();
     for (const entity of [...s.survivors, ...s.zombies]) if (!entity.isAlive()) s.meta[entity.id].diedTick ??= s.tick;
@@ -166,7 +166,7 @@ export class World {
       const meta = s.meta[entity.id];
       return { id: entity.id, name: meta.name, kind: entity instanceof Survivor ? 'survivor' : 'zombie',
         ownerName: ownerName(meta.owner), health: entity.health, maxHealth: entity.maxHealth, kills: entity.kills,
-        aliveSeconds: Number.isFinite(meta.bornTick) ? Math.max(0, ((meta.diedTick ?? s.tick) - meta.bornTick) / 10) : null };
+        aliveSeconds: Number.isFinite(meta.bornTick) ? Math.max(0, ((meta.diedTick ?? s.tick) - meta.bornTick) * (s.timing?.tickMs ?? 100) / 1000) : null };
     };
     const cells = [];
     for (let y = 0; y < s.grid.height; y++) for (let x = 0; x < s.grid.width; x++) {

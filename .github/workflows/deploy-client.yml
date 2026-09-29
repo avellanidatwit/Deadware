@@ -1,0 +1,45 @@
+name: Deploy web client
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: pages
+  cancel-in-progress: true
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - name: Require the public API endpoint
+        env:
+          VITE_API_URL: ${{ vars.VITE_API_URL }}
+        run: node -e "const u = new URL(process.env.VITE_API_URL); if (u.protocol !== 'https:' || u.origin !== process.env.VITE_API_URL) throw new Error('Set VITE_API_URL to the HTTPS API origin, without a trailing slash');"
+      - run: npm run build:client
+        env:
+          VITE_API_URL: ${{ vars.VITE_API_URL }}
+          VITE_BASE_PATH: ${{ vars.VITE_BASE_PATH || './' }}
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: web-dist
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/configure-pages@v5
+      - name: Deploy
+        id: deployment
+        uses: actions/deploy-pages@v4

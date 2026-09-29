@@ -1,9 +1,9 @@
-﻿import { drawWorld } from "../dist/ui/worldRenderer.js";
-import { Survivor } from "../dist/entities/survivor.js";
-import { Zombie } from "../dist/entities/zombie.js";
+import { drawWorld } from "../dist/client/src/ui/worldRenderer.js";
+import { Survivor } from "../dist/server/src/entities/survivor.js";
+import { Zombie } from "../dist/server/src/entities/zombie.js";
 import test from "node:test";
 import assert from "node:assert/strict";
-import { Grid } from "../dist/world/grid.js";
+import { Grid } from "../dist/server/src/world/grid.js";
 
 test('renderer preserves visibility using server-provided view methods', () => {
     const map = new Grid(30, 3), observer = new Survivor("observer", 1, 1);
@@ -50,7 +50,7 @@ test('login opens an owned-entity viewer, switches perspectives and logs out', a
   };
   const settle = () => new Promise(resolve => setImmediate(resolve));
   try {
-    await import('../dist/main.js');
+    await import('../dist/client/src/legacy.js');
     assert.equal(calls.length, 0, 'no world requests before login');
     elements.get('#viewer-page').hidden = true;
     elements.get('#email').value = 'player@example.com'; elements.get('#password').value = 'correct-password';
@@ -96,7 +96,7 @@ test('programming tab creates only survivors, edits both life stages and reuses 
   const workspace = { entities: [{ id: 's', name: 'Scout', kind: 'survivor', health: 100, program: wait, zombieScript: wait }, { id: 'z', name: 'Walker', kind: 'zombie', health: 100, program: wait }], scripts: [{ id: 'saved', name: 'Archive', script: wait, zombieScript: 'OTHERWISE\n WANDER', sourceSurvivorId: 'dead' }], queue: [], defaults: { script: wait, zombieScript: wait } };
   const request = async (path, method = 'GET', body) => { calls.push({ path, method, body }); return path === '/api/programming' ? structuredClone(workspace) : { id: 'queued', scriptVersion: 2 }; };
   try {
-    const { setupProgramming } = await import('../dist/ui/programming.js');
+    const { setupProgramming } = await import('../dist/client/src/ui/programming.js');
     const programming = setupProgramming(request); await programming.refresh();
     assert.equal(elements.get('#program-entity').children[0].textContent, 'Create a survivor');
     elements.get('#survivor-name').value = 'New scout';
@@ -135,7 +135,7 @@ test('status bars and inventory stay private; hover only displays visible public
   globalThis.document = { querySelector(id) { if (!elements.has(id)) elements.set(id, element()); return elements.get(id); }, createElement: element };
   const text = e => [e.textContent, ...e.children.map(text)].join(' ');
   try {
-    const { renderStatus, renderInspection, setupInspector, tileAtPointer, duration } = await import('../dist/ui/entityDetails.js');
+    const { renderStatus, renderInspection, setupInspector, tileAtPointer, duration } = await import('../dist/client/src/ui/entityDetails.js');
     const actor = { id: 's', kind: 'survivor', name: '<Scout>', ownerName: 'Riley', health: 42, maxHealth: 100, kills: 3, aliveSeconds: 122 };
     renderStatus({ ...actor, x: 2, y: 1, hunger: 20, thirst: 75, stamina: 60, ammo: 4, equippedItemId: 'crowbar', inventory: [{ id: 'crowbar', type: 'weapon', name: 'Crowbar' }], floor: [], message: 'Waiting.' });
     assert.equal(elements.get('#status-heading').textContent, '<Scout>');

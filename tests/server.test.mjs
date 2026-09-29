@@ -1,14 +1,14 @@
-﻿import test from 'node:test';
+import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { startServer } from '../server.mjs';
-import { World, encode, compile } from '../server/world.mjs';
-import { Survivor } from '../dist/entities/survivor.js';
-import { Grid } from '../dist/world/grid.js';
-import { Zombie } from '../dist/entities/zombie.js';
-import { ItemContainer } from '../dist/entities/container.js';
+import { World, encode, compile } from '../dist/server/src/world.mjs';
+import { Survivor } from '../dist/server/src/entities/survivor.js';
+import { Grid } from '../dist/server/src/world/grid.js';
+import { Zombie } from '../dist/server/src/entities/zombie.js';
+import { ItemContainer } from '../dist/server/src/entities/container.js';
 const wait = 'OTHERWISE\n WAIT', token = 'a'.repeat(32), other = 'b'.repeat(32);
 const users = JSON.stringify([{ email: 'player@example.com', password: 'test-password-123', owner: 'operator', displayName: 'Riley' }, { email: 'other@example.com', password: 'other-password-123', owner: 'other' }]);
 function decision(world) { for (let i = 0; i < 6; i++) world.advance(); }

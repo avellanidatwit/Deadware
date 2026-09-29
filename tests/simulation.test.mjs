@@ -1,14 +1,14 @@
-import { survivorCode } from "../dist/data/survivorProgram.js";
+import { survivorCode } from "../dist/server/src/data/survivorProgram.js";
 import test from "node:test";
 import assert from "node:assert/strict";
-import { Grid } from "../dist/world/grid.js";
-import { Survivor } from "../dist/entities/survivor.js";
-import { Zombie } from "../dist/entities/zombie.js";
-import { ItemContainer } from "../dist/entities/container.js";
-import { createItem } from "../dist/entities/item.js";
-import { parseSurvivorScript as parse, runSurvivorProgram as select, runSurvivorTick, executeSurvivorAction } from "../dist/scripting/survivorScript.js";
-import { runZombieTick } from "../dist/scripting/zombieScript.js";
-import { resolveTargets } from "../dist/scripting/runtime/targetResolver.js";
+import { Grid } from "../dist/server/src/world/grid.js";
+import { Survivor } from "../dist/server/src/entities/survivor.js";
+import { Zombie } from "../dist/server/src/entities/zombie.js";
+import { ItemContainer } from "../dist/server/src/entities/container.js";
+import { createItem } from "../dist/server/src/entities/item.js";
+import { parseSurvivorScript as parse, runSurvivorProgram as select, runSurvivorTick, executeSurvivorAction } from "../dist/server/src/scripting/survivorScript.js";
+import { runZombieTick } from "../dist/server/src/scripting/zombieScript.js";
+import { resolveTargets } from "../dist/server/src/scripting/runtime/targetResolver.js";
 
 function setup() {
   const grid = new Grid(20, 12), survivor = new Survivor("s", 2, 2);

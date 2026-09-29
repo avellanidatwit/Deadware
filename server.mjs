@@ -1,9 +1,9 @@
-﻿import { createServer } from 'node:http';
+import { createServer } from 'node:http';
 import { readFile, mkdir } from 'node:fs/promises';
 import { DatabaseSync } from 'node:sqlite';
 import { createHash } from 'node:crypto';
 import { pathToFileURL } from 'node:url';
-import { World, encode } from './server/world.mjs';
+import { World, encode } from './dist/server/src/world.mjs';
 import { createAuth } from './server/auth.mjs';
 
 export async function startServer({ port = Number(process.env.PORT ?? 3000), host = process.env.HOST ?? '127.0.0.1', database = process.env.DEADWARE_DB ?? './data/world.sqlite', tokens = process.env.DEADWARE_TOKENS, users = process.env.DEADWARE_USERS, origins = process.env.DEADWARE_ORIGINS ?? '', tickMs = 100 } = {}) {
@@ -94,7 +94,7 @@ export async function startServer({ port = Number(process.env.PORT ?? 3000), hos
         }
         return send(404, { error: 'Endpoint not found.' });
       }
-      const pages = { '/': 'public/index.html', '/wiki': 'public/wiki.html', '/wiki.html': 'public/wiki.html', '/tutorial': 'public/tutorial.html', '/tutorial.html': 'public/tutorial.html', '/account': 'public/account.html', '/account.html': 'public/account.html', '/site.css': 'public/site.css', '/game.css': 'public/game.css', '/dist/main.js': 'dist/main.js', '/dist/ui/programming.js': 'dist/ui/programming.js', '/dist/ui/entityDetails.js': 'dist/ui/entityDetails.js', '/dist/ui/worldRenderer.js': 'dist/ui/worldRenderer.js' };
+      const pages = { '/': 'public/index.html', '/wiki': 'public/wiki.html', '/wiki.html': 'public/wiki.html', '/tutorial': 'public/tutorial.html', '/tutorial.html': 'public/tutorial.html', '/account': 'public/account.html', '/account.html': 'public/account.html', '/site.css': 'public/site.css', '/game.css': 'public/game.css', '/dist/main.js': 'dist/client/src/legacy.js', '/dist/ui/programming.js': 'dist/client/src/ui/programming.js', '/dist/ui/entityDetails.js': 'dist/client/src/ui/entityDetails.js', '/dist/ui/worldRenderer.js': 'dist/client/src/ui/worldRenderer.js' };
       const file = Object.hasOwn(pages, pathname) && pages[pathname];
       if (!file || !['GET', 'HEAD'].includes(req.method)) { res.writeHead(404).end('Not found'); return; }
       const content = await readFile(new URL(file, import.meta.url));

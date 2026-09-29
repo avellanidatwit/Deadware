@@ -1,5 +1,6 @@
-import type { Grid, TileType } from "../world/grid.js";
-import type { Survivor } from "../entities/survivor.js";
+import type { GridCell, TileType } from "../../../shared/src/types/world.js";
+interface ViewGrid { width: number; height: number; getCell(x: number, y: number): GridCell | null }
+interface ViewObserver { canSee(x: number, y: number): boolean; hasExplored(x: number, y: number): boolean }
 
 const visibleColors: Record<TileType, string> = {
   road: "#68717c", empty: "#385849", buildingWall: "#acbac6",
@@ -12,7 +13,7 @@ const rememberedColors: Record<TileType, string> = {
 const tileSize = 16;
 
 /** Terrain stays remembered; entities and loose loot require current sight. */
-export function drawWorld(ctx: CanvasRenderingContext2D, grid: Pick<Grid, "width" | "height" | "getCell">, survivor: Pick<Survivor, "canSee" | "hasExplored">): void {
+export function drawWorld(ctx: CanvasRenderingContext2D, grid: ViewGrid, survivor: ViewObserver): void {
   ctx.font = "bold 12px monospace";
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";

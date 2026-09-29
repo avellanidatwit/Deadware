@@ -1,5 +1,7 @@
-import type { GridCell, GridEntity } from '../world/grid.js';
-import type { Item } from '../entities/item.js';
+export interface Item { id: string; type: 'food' | 'weapon' | 'bandage' | 'water' | 'gun' | 'ammo'; name: string; catalogKey: string }
+export type TileType = 'empty' | 'road' | 'buildingWall' | 'buildingFloor' | 'door' | 'openDoor';
+export interface GridEntity { id: string; x: number; y: number; symbol: string; blocksMovement?: boolean }
+export interface GridCell { x: number; y: number; tileType: TileType; entities: GridEntity[]; items: Item[] }
 export interface PublicActor {
   id: string; kind: 'survivor' | 'zombie'; name: string; ownerName: string;
   health: number; maxHealth: number; kills: number; aliveSeconds: number | null;
