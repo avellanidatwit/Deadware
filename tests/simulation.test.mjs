@@ -99,7 +99,7 @@ test("survivor history records decisions and persists through recovery", () => {
   const c = setup();
   c.survivor.program = "OTHERWISE\n WAIT";
   runSurvivorTick(parse("OTHERWISE\n WAIT"), { ...c, tick: 7 });
-  assert.deepEqual(c.survivor.history.at(-1), { tick: 7, message: "wait: Survivor: wait." });
+  assert.deepEqual(c.survivor.history.at(-1), { tick: 7, message: "WAIT" });
   for (let tick = 8; tick < 120; tick++) c.survivor.recordEvent(tick, `Event ${tick}`);
   assert.equal(c.survivor.history.length, 100);
   assert.equal(c.survivor.history[0].tick, 20);
@@ -142,4 +142,141 @@ test('fleeing respects movement cooldown, turns at edges and prioritizes safety'
   assert.deepEqual([survivor.x, survivor.y], [9, 0]);
   for (const [x, y] of [[8, 0], [10, 0], [9, 1]]) grid.getCell(x, y).tileType = 'buildingWall';
   moveUpdate(); assert.deepEqual([survivor.x, survivor.y], [9, 0]);
+});
+
+
+test("history preserves the selected action source and distinguishes implicit waits", () => {
+  const c = setup();
+  for (const command of ["MOVE east", "MOVE_TO nearest container 8", "LOOK floor food", "SET home = position", "REMEMBER nearest container AS target", "USE water"]) {
+    const program = parse(`WHEN health < 1\n WAIT\nOTHERWISE\n    ${command}`);
+    runSurvivorTick(program, { ...c, tick: 2 });
+    assert.equal(c.survivor.history.at(-1).message, command);
+  }
+  const movement = parse("OTHERWISE\n MOVE west");
+  runSurvivorTick(movement, { ...c, tick: 3, canMove: false });
+  assert.equal(c.survivor.history.at(-1).message, "WAIT (no eligible rule matched)");
+});
+
+
+test("saved programs edit and delete only owned entries and survive recovery", () => {
+  const world = new World(), source = 'OTHERWISE\n WAIT';
+  const pair = world.saveScript('alice', 'Original', source, source);
+  const other = world.saveScript('bob', 'Other', source, source);
+  assert.throws(() => world.updateScript('bob', pair.id, 'Bad', source, source), error => error.status === 404);
+  assert.throws(() => world.deleteScript('bob', pair.id), error => error.status === 404);
+  assert.throws(() => world.updateScript('alice', pair.id, 'Bad', source, 'INVALID'));
+  assert.equal(pair.name, 'Original');
+  world.updateScript('alice', pair.id, 'Edited', 'OTHERWISE\n MOVE east', source);
+  const restored = new World(encode(world.state));
+  assert.equal(restored.scripts('alice')[0].script, 'OTHERWISE\n MOVE east');
+  restored.deleteScript('alice', pair.id);
+  const deleted = new World(encode(restored.state));
+  assert.deepEqual(deleted.scripts('alice'), []);
+  assert.equal(deleted.scripts('bob')[0].id, other.id);
+  assert.throws(() => deleted.deleteScript('alice', pair.id), error => error.status === 404);
+});
+
+
+test("survivor limit includes queued spawns, frees slots on death and excludes zombies", () => {
+  const world = new World(), script = 'OTHERWISE\n WAIT';
+  for (let i = 0; i < 10; i++) world.inject('alice', 'survivor', `Scout ${i}`, script, script);
+  assert.throws(() => world.inject('alice', 'survivor', 'Extra', script), /10 active survivors/);
+  assert.doesNotThrow(() => world.inject('bob', 'survivor', 'Bob', script, script));
+  for (let i = 0; i < 66; i++) world.advance();
+  assert.throws(() => world.inject('alice', 'survivor', 'Extra', script), /10 active survivors/);
+  world.state.survivors.find(entity => world.state.meta[entity.id].owner === 'alice').health = 0;
+  assert.doesNotThrow(() => world.inject('alice', 'survivor', 'Replacement', script, script));
+  assert.throws(() => world.inject('alice', 'survivor', 'Extra', script), /10 active survivors/);
+  for (let round = 0; round < 2; round++) {
+    for (const entity of world.state.survivors) if (world.state.meta[entity.id].owner === 'alice') entity.health = 0;
+    world.raiseDead();
+    while (world.state.queue.filter(entry => entry.owner === 'alice').length < 10) world.inject('alice', 'survivor', 'Replacement', script, script);
+    for (let i = 0; i < 60; i++) world.advance();
+  }
+  assert.equal(world.state.zombies.length, 20);
+  const recovered = new World(encode(world.state));
+  assert.throws(() => recovered.inject('alice', 'survivor', 'Extra', script), /10 active survivors/);
+  assert.equal(recovered.state.zombies.length, 20);
+});
+
+
+test("one carried weapon, armor combat stats, and conditional full-magazine reloads", () => {
+  const c = setup(), floor = c.grid.getCell(2,2);
+  floor.items.push(createItem('gun'), createItem('weapon'), createItem('gun'), createItem('ammo'), createItem('ammo'), createItem('armor'));
+  c.survivor.pickUpItems(c.grid);
+  assert.equal(c.survivor.inventory.filter(item => ['weapon','gun'].includes(item.type)).length,1);
+  assert.equal(floor.items.length,2);
+  assert.equal(c.survivor.useItem('ammo'),false);
+  assert.equal(c.survivor.inventory.filter(item=>item.type==='ammo').length,2);
+  assert.equal(c.survivor.equip('gun'),true);
+  c.survivor.ammo = 2;
+  act(c,'RELOAD'); assert.equal(c.survivor.ammo,6);
+  assert.equal(c.survivor.inventory.filter(item=>item.type==='ammo').length,1);
+  act(c,'RELOAD'); assert.equal(c.survivor.inventory.filter(item=>item.type==='ammo').length,1);
+  assert.equal(c.survivor.equip('armor'),true);
+  assert.equal(matches(c,'equipped armor'),true);
+  assert.equal(c.survivor.combatStats.damage,40);
+  assert.equal(c.survivor.combatStats.meleeDamage,25);
+  assert.equal(c.survivor.combatStats.armor,5);
+  c.survivor.takeDamage(20); assert.equal(c.survivor.health,85);
+  c.survivor.takeDamage(3); assert.equal(c.survivor.health,85);
+  c.survivor.hunger=100; c.survivor.updateNeeds(); assert.equal(c.survivor.health,84);
+  const target = zombie(c,'target',3,2);
+  act(c,'SHOOT nearest zombie'); assert.equal(target.health,60); assert.equal(c.survivor.ammo,5);
+  c.survivor.dropItem(c.grid,'gun'); assert.equal(c.survivor.ammo,0);
+  assert.equal(c.survivor.useItem('ammo'),false);
+  c.survivor.pickUpItems(c.grid,'weapon'); act(c,'EQUIP weapon');
+  assert.equal(c.survivor.combatStats.meleeDamage,40);
+  act(c,'ATTACK zombie'); assert.equal(target.health,20);
+  c.survivor.dropItem(c.grid,'armor'); assert.equal(c.survivor.combatStats.armor,0);
+});
+
+test("recovery preserves equipped weapon and returns extra weapons to the floor", () => {
+  const c = setup(), gun=createItem('gun'), melee=createItem('weapon');
+  c.survivor.carriedItems=[melee,gun]; c.survivor.equippedItemId=gun.id; c.survivor.ammo=4;
+  c.survivor.normalizeEquipment(c.grid);
+  assert.equal(c.survivor.inventory.length,1); assert.equal(c.survivor.equippedItem.id,gun.id);
+  assert.equal(c.grid.getCell(2,2).items[0].id,melee.id); assert.equal(c.survivor.ammo,4);
+});
+
+
+test("combined zombie view merges only living owned zombie sight", () => {
+  const world = new World(); world.state.grid = new Grid(20,12);
+  for (const [id,x,y,owner,health] of [['a',2,2,'alice',100],['b',16,2,'alice',100],['foreign',10,10,'bob',100],['dead',2,10,'alice',0]]) {
+    const actor = new Zombie(id,x,y); actor.health=health; actor.detectionRange=2;
+    world.state.zombies.push(actor); world.state.grid.addEntity(actor);
+    world.state.meta[id]={owner,name:id,version:1,bornTick:0};
+  }
+  const a=world.snapshot('alice','a'), b=world.snapshot('alice','b');
+  const combined=world.snapshot('alice',undefined,id=>id,true);
+  assert.equal(combined.observer,null);
+  assert.deepEqual(combined.zombieObservers.map(z=>z.id),['a','b']);
+  for(let i=0;i<combined.cells.length;i++) {
+    assert.equal(combined.cells[i].visible,a.cells[i].visible || b.cells[i].visible);
+    assert.equal(combined.cells[i].explored,combined.cells[i].visible);
+    if(!combined.cells[i].visible) assert.deepEqual(combined.cells[i].entities,[]);
+  }
+  assert.equal(combined.cells.find(c=>c.x===10 && c.y===10).visible,false);
+  assert.equal(combined.cells.find(c=>c.x===2 && c.y===10).visible,false);
+  assert.equal(combined.zombieObservers.some(z=>'program' in z || 'inventory' in z),false);
+  const empty=world.snapshot('nobody',undefined,id=>id,true);
+  assert.deepEqual(empty.zombieObservers,[]); assert.equal(empty.cells.some(c=>c.visible),false);
+});
+
+
+test("blocked weapon pickups fall through while eligible floor loot is still collected", () => {
+  const c = setup(), floor = c.grid.getCell(2,2);
+  floor.items.push(createItem('weapon')); c.survivor.pickUpItems(c.grid); c.survivor.equip('weapon');
+  floor.items.push(createItem('weapon'));
+  const program = parse('WHEN itemsOnFloor AND inventorySpace\n PICK_UP items\nOTHERWISE\n MOVE east');
+  runSurvivorTick(program,c);
+  assert.equal(c.survivor.x,3); assert.equal(floor.items.length,1);
+  c.grid.moveEntity(c.survivor,2,2); floor.items.push(createItem('food'));
+  runSurvivorTick(program,c);
+  assert.equal(c.survivor.x,2); assert.equal(c.survivor.inventory.some(item=>item.type==='food'),true);
+  assert.equal(floor.items.length,1);
+  const typed = parse('WHEN itemsOnFloor\n PICK_UP weapon\nOTHERWISE\n WAIT');
+  assert.equal(select(typed,c).type,'wait');
+  c.survivor.dropItem(c.grid,'weapon');
+  assert.equal(select(typed,c).type,'item');
 });

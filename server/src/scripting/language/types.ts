@@ -78,6 +78,7 @@ export type Condition =
 // ======================================================
 
 export interface ScriptRule {
+  actionSource?: string;
   condition: Condition;
   action: SurvivorAction;
 }

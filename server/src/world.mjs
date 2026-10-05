@@ -68,6 +68,7 @@ export class World {
     for (const entity of [...this.state.survivors, ...this.state.zombies]) entity.kills ??= 0;
     this.state.queue = this.state.queue.filter(q => q.kind === 'survivor');
     for (const entity of this.state.survivors) this.state.meta[entity.id].zombieScript ??= defaultZombieScript;
+    for (const survivor of this.state.survivors) survivor.normalizeEquipment(this.state.grid);
     this.programs = new Map([...this.state.survivors, ...this.state.zombies].map(e => [e.id, compile(e.program, e.symbol === 'S' ? 'survivor' : 'zombie')]));
     this.vision();
   }
@@ -94,10 +95,21 @@ export class World {
     if (typeof name !== 'string' || !name.trim() || name.length > 64) throw new Error('Name must contain 1–64 characters.');
     compile(script, kind);
     compile(zombieScript, 'zombie');
-    if (this.state.survivors.filter(e => this.state.meta[e.id].owner === owner).length + this.state.queue.filter(q => q.owner === owner).length >= 100 || this.state.queue.length >= 100) throw new Error('Survivor capacity reached.');
+    const active = this.state.survivors.filter(e => e.isAlive() && this.state.meta[e.id].owner === owner).length;
+    const queued = this.state.queue.filter(q => q.owner === owner).length;
+    if (active + queued >= 10) throw new Error('You can have at most 10 active survivors, including queued spawns.');
+    if (this.state.queue.length >= 100) throw new Error('The spawn queue is full. Try again shortly.');
     const request = { id: randomUUID(), owner, kind, name: name.trim(), script, zombieScript };
     this.state.queue.push(request);
     return { success: true, id: request.id, status: 'queued' };
+  }
+  removeOwner(owner) {
+    const ids = new Set(Object.entries(this.state.meta).filter(([, meta]) => meta.owner === owner).map(([id]) => id));
+    for (const id of ids) { this.state.grid.removeEntity(id); this.programs.delete(id); delete this.state.meta[id]; }
+    this.state.survivors = this.state.survivors.filter(entity => !ids.has(entity.id));
+    this.state.zombies = this.state.zombies.filter(entity => !ids.has(entity.id));
+    this.state.queue = this.state.queue.filter(entry => entry.owner !== owner);
+    this.state.library = this.state.library.filter(entry => entry.owner !== owner);
   }
   scripts(owner) { return this.state.library.filter(entry => entry.owner === owner); }
   programming(owner) {
@@ -112,6 +124,20 @@ export class World {
     const entry = { id: randomUUID(), owner, name: name.trim(), script, zombieScript, savedAt: this.state.tick };
     this.state.library.push(entry);
     return entry;
+  }
+  updateScript(owner, id, name, script, zombieScript) {
+    const entry = this.scripts(owner).find(entry => entry.id === id);
+    if (!entry) throw Object.assign(new Error('Saved program not found.'), { status: 404 });
+    if (typeof name !== 'string' || !name.trim() || name.length > 64) throw new Error('Use a script name of 1-64 characters.');
+    compile(script, 'survivor'); compile(zombieScript, 'zombie');
+    Object.assign(entry, { name: name.trim(), script, zombieScript });
+    return entry;
+  }
+  deleteScript(owner, id) {
+    const entry = this.scripts(owner).find(entry => entry.id === id);
+    if (!entry) throw Object.assign(new Error('Saved program not found.'), { status: 404 });
+    this.state.library = this.state.library.filter(item => item !== entry);
+    return { success: true };
   }
   raiseDead() {
     const s = this.state;
@@ -157,10 +183,11 @@ export class World {
     for (const entity of [...s.survivors, ...s.zombies]) if (!entity.isAlive()) s.meta[entity.id].diedTick ??= s.tick;
     this.vision();
   }
-  snapshot(owner, entityId, ownerName = id => id) {
+  snapshot(owner, entityId, ownerName = id => id, allZombies = false) {
     const s = this.state;
     const owned = [...s.survivors, ...s.zombies].filter(e => s.meta[e.id].owner === owner);
-    const observer = entityId ? owned.find(e => e.id === entityId) : owned.find(e => e.isAlive()) ?? owned[0];
+    const observers = allZombies ? owned.filter(e => e instanceof Zombie && e.isAlive()) : [];
+    const observer = allZombies ? undefined : entityId ? owned.find(e => e.id === entityId) : owned.find(e => e.isAlive()) ?? owned[0];
     if (entityId && !observer) throw Object.assign(new Error('Entity not found.'), { status: 404 });
     const isSurvivor = observer instanceof Survivor;
     // Public actor details are explicitly projected. Never serialize an actor or its metadata wholesale.
@@ -170,20 +197,32 @@ export class World {
         ownerName: ownerName(meta.owner), health: entity.health, maxHealth: entity.maxHealth, kills: entity.kills,
         aliveSeconds: Number.isFinite(meta.bornTick) ? Math.max(0, ((meta.diedTick ?? s.tick) - meta.bornTick) * (s.timing?.tickMs ?? 100) / 1000) : null };
     };
+    const zombieSight = new Set();
+    for (const zombie of observers) {
+      const range = zombie.detectionRange;
+      for (let y = Math.max(0, zombie.y - range); y <= Math.min(s.grid.height - 1, zombie.y + range); y++) {
+        for (let x = Math.max(0, zombie.x - range); x <= Math.min(s.grid.width - 1, zombie.x + range); x++) {
+          const key = `${x},${y}`;
+          if (!zombieSight.has(key) && hasLineOfSight(s.grid, zombie, { x, y }, { range })) zombieSight.add(key);
+        }
+      }
+    }
     const cells = [];
     for (let y = 0; y < s.grid.height; y++) for (let x = 0; x < s.grid.width; x++) {
       const cell = s.grid.getCell(x, y);
-      const visible = isSurvivor ? observer.canSee(x, y) : !!observer?.isAlive() && hasLineOfSight(s.grid, observer, { x, y }, { range: observer.detectionRange });
+      const visible = allZombies ? zombieSight.has(`${x},${y}`) : isSurvivor ? observer.canSee(x, y) : !!observer?.isAlive() && hasLineOfSight(s.grid, observer, { x, y }, { range: observer.detectionRange });
       const explored = isSurvivor ? observer.hasExplored(x, y) : visible;
       cells.push({ x, y, visible, explored, tileType: explored ? cell.tileType : 'empty', items: visible ? cell.items : [], entities: visible ? cell.entities.map(e => ({ id: e.id, x, y, symbol: e.symbol,
         ...(e instanceof Survivor || e instanceof Zombie ? { name: s.meta[e.id].name, actor: publicActor(e) } : { name: e.name }) })) : [] });
     }
     return { tick: s.tick, width: s.grid.width, height: s.grid.height, cells,
+      ...(allZombies ? { zombieObservers: observers.map(zombie => ({ ...publicActor(zombie), x: zombie.x, y: zombie.y,
+        sightRange: zombie.detectionRange, message: 'Zombie program is running.' })) } : {}),
       entities: this.entities(owner).map(({ id, kind, name, health }) => ({ id, kind, name, health })),
       observer: observer ? { ...publicActor(observer),
         x: observer.x, y: observer.y, health: observer.health, maxHealth: observer.maxHealth,
         sightRange: isSurvivor ? observer.sightRange : observer.detectionRange,
-        ...(isSurvivor ? { hunger: observer.hunger, thirst: observer.thirst, stamina: observer.stamina, ammo: observer.ammo, equippedItemId: observer.equippedItemId, inventory: observer.inventory, floor: observer.lookAtFloor(s.grid) } : {}),
+        ...(isSurvivor ? { hunger: observer.hunger, thirst: observer.thirst, stamina: observer.stamina, ammo: observer.ammo, equippedItemId: observer.equippedItemId, equippedArmorId: observer.equippedArmorId, combat: observer.combatStats, inventory: observer.inventory, floor: observer.lookAtFloor(s.grid) } : {}),
         ...(isSurvivor ? { history: observer.history } : {}),
         message: !observer.isAlive() ? 'Dead. No longer acting.' : isSurvivor ? s.meta[observer.id].message : 'Zombie program is running.' } : null };
   }

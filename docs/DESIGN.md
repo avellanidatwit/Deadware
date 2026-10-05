@@ -73,7 +73,7 @@ Existing commands and action objects are preserved by the public facade; explici
 | `RELOAD` | Consume one ammo pack to fill the six-round magazine; requires equipped gun; does nothing if already full |
 | `WAIT` | Remain in place and recover stamina |
 
-Interaction and melee selectors resolve among targets within reach (one tile); a farther weak enemy does not prevent an adjacent attack. Combat targets must be alive. Dead enemies are removed immediately. Dropping a gun discards its loaded rounds. Equipment currently supports one active slot. Searching a container does not equip or pick up anything automatically.
+Interaction and melee selectors resolve among targets within reach (one tile); a farther weak enemy does not prevent an adjacent attack. Combat targets must be alive. Dead enemies are removed immediately. Dropping a gun discards its loaded rounds. Survivors can carry only one weapon total (a gun or melee weapon), with separate equipped weapon and armor slots. On recovery, extra weapons are returned to the floor, preserving the equipped weapon when possible. Searching a container does not equip or pick up anything automatically.
 
 ### Needs and memory
 
@@ -156,7 +156,7 @@ Stages are cumulative: basic behavior; interaction; Boolean logic; targeting/cou
 
 ## Application structure
 
-The React client provides registration, email/password login, survivor selection, script editing, a saved-program library, a Canvas map and survivor decision history. It polls the API for updates. Sessions use HttpOnly cookies and survive page refreshes until expiry or logout.
+The React client has View, Tutorial, Wiki, Code and Account pages. View includes the full Canvas map, tile inspection, entity status, inventory, grid legend and decision history. Code provides survivor creation, script editing and a saved-program library. Account supports registration, email/password login, username and email changes, signed-in password resets and permanent account deletion. Changes require the current password and revoke all sessions. Deletion requires typing DELETE and removes owned entities, queued spawns, scripts and account records in the same transaction as the world checkpoint. Tutorial and Wiki are available without signing in. It polls the API for updates. Sessions use HttpOnly cookies and survive page refreshes until expiry or logout.
 
 - `client/`: website and API requests.
 - `server/src/api/`: authentication, validation and ownership checks.
@@ -175,7 +175,7 @@ The server creates a world when no save exists. PostgreSQL stores accounts, sess
 
 Passwords use Argon2id. Sessions expire after 12 hours. The API validates request origins, input and ownership; clients cannot choose owner IDs, positions, health or inventory. The runtime database role cannot change the schema. Scripts run through the game's interpreter and never execute JavaScript.
 
-Only survivor creation enters the durable queue, limited to 100 entries. Each decision attempts one spawn on a free walkable tile. An owner may have at most 100 survivors and queued definitions, including dead survivors. Resurrected zombies do not consume another survivor slot.
+Only survivor creation enters the durable queue, limited to 100 entries. Each decision attempts one spawn on a free walkable tile. Each player may have at most 10 living survivors and queued spawns combined. Death frees a survivor slot. Dead survivors do not count, and zombies have no player quota. Existing populations above the limit are preserved but cannot add survivors until below the limit.
 
 ## Programming and resurrection
 
@@ -183,14 +183,27 @@ New survivors have a living program and a prepared zombie program. Both are vali
 
 After survivor and zombie actions, dead survivors rise at their final coordinates with the same owner and prepared zombie program. They first act on the next decision. Stored origin and descendant IDs prevent duplicate resurrection after recovery.
 
-Named script pairs can be saved and loaded into the editor. Death archives the last deployed living and zombie programs. Manual saves are limited to 100 pairs per owner, plus one death archive per survivor.
+Named script pairs can be saved, edited in the main editor and deleted from the Saved programs dropdown. Editing or deleting a library entry does not change deployed entity behavior. Death archives the last deployed living and zombie programs. Manual saves are limited to 100 pairs per owner, plus one death archive per survivor.
 
 ## Visibility
 
 The server checks ownership of the selected observer. Survivors remember explored terrain; zombies see only their current surroundings. Other actors and loose items appear only within current sight. Public actor data excludes scripts, inventory, needs, memory and login email.
 
-The current client draws the map and shows the selected entity's health, message and survivor decision history. Richer inspection panels are not implemented.
+The map inspector supports pointer, touch and keyboard selection. It displays only the current snapshot's visible occupants. The entity sidebar shows the selected owner's status and inventory. The map scales to its panel without an internal scrollbar.
 
 ## Future work
 
-Password recovery, richer inspection, progression rewards and push updates are deferred. The scripting language does not support arbitrary variables, user functions or loops.
+Forgotten-password recovery by email, progression rewards and push updates are deferred. The scripting language does not support arbitrary variables, user functions or loops.
+
+
+## Equipment and ammunition
+
+Survivors deal 25 base damage. An equipped crowbar adds 15 melee damage; an equipped pistol adds 15 shooting damage, for 40 damage per shot. A pistol does not increase melee damage. The sidebar shows damage, base and weapon contributions, armor reduction, attack range and equipped item names. Loaded ammunition appears only while carrying a gun.
+
+Armor vests block 5 damage per combat hit, to a minimum of zero damage. Equip one with `EQUIP armor`; `equipped armor` tests that slot. Armor does not block hunger or thirst damage. Vests are included in newly generated loot; existing world loot is preserved.
+
+`RELOAD` consumes one ammo pouch to fill the equipped pistol to six rounds. It requires a carried pouch, an equipped gun and at least one empty magazine slot. Failed reloads do not consume pouches. Dropping a gun discards its loaded ammunition.
+
+The View selector also offers All zombies: the server combines current sight from the signed-in player's living zombies. Other players' entities never contribute sight. Hovering or tapping an owned zombie selects its sidebar stats, which remain selected across snapshot updates until another zombie is selected.
+
+Pickup rules are skipped when no matching floor item can be carried (including an extra weapon blocked by the one-weapon limit). Later matching rules can run instead. `itemsOnFloor` still detects all floor items.

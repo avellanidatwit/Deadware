@@ -1,10 +1,10 @@
-import type { Pool } from 'pg';
+import type { Pool, PoolClient } from 'pg';
 import { World, encode } from '../../world.mjs';
 
 export class WorldRepository {
   constructor(private pool: Pool) {}
   async load() { return (await this.pool.query('SELECT state FROM worlds WHERE id=1')).rows[0]?.state as string | undefined; }
-  async save(world: World) {
+  async save(world: World, beforeCommit?: (client: PoolClient) => Promise<void>) {
     // Capture everything before the first await so SQL rows and checkpoint describe the same tick.
     const state = encode(world.state), tick = world.state.tick;
     const rows = world.state.survivors.map((entity: any) => {
@@ -28,6 +28,7 @@ export class WorldRepository {
         await client.query(`INSERT INTO survivor_scripts(survivor_id,source_code,zombie_source_code,version)
           VALUES($1,$2,$3,$4) ON CONFLICT(survivor_id,version) DO NOTHING`, [row.id,row.script,row.zombieScript,row.version]);
       }
+      await beforeCommit?.(client);
       await client.query('COMMIT');
     } catch (error) { await client.query('ROLLBACK'); throw error; }
     finally { client.release(); }

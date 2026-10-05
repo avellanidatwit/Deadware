@@ -93,7 +93,7 @@ function targeted(verb: string, target: Target, context: ScriptContext): boolean
       if (survivor.equippedItem?.type !== "gun" || survivor.ammo <= 0) return false;
       survivor.ammo--;
     }
-    resolved.takeDamage(verb === "SHOOT" ? 40 : survivor.equippedItem?.type === "weapon" ? 40 : 25);
+    resolved.takeDamage(verb === "SHOOT" ? survivor.combatStats.damage : survivor.combatStats.meleeDamage);
     if (!resolved.isAlive()) { survivor.kills++; grid.removeEntity(resolved.id); }
     return true;
   }

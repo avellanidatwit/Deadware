@@ -10,7 +10,15 @@ Install **Node.js 24+** and **PostgreSQL 17**, then open a terminal in this proj
 
 ### 1. Create the database
 
-For a **new database only**, run:
+For a **new database only**, run the command for your terminal.
+
+**Windows PowerShell** (default PostgreSQL 17 installation):
+
+```powershell
+& "C:\Program Files\PostgreSQL\17\bin\psql.exe" -h 127.0.0.1 -U postgres -d postgres -f server/database/setup.sql
+```
+
+**Other terminals**, with `psql` on PATH:
 
 ```sh
 psql -h 127.0.0.1 -U postgres -d postgres -f server/database/setup.sql
@@ -21,11 +29,7 @@ The script creates the database and prompts for two passwords:
 - `deadware_app`: used by the game.
 - `deadware_migrator`: used to update the database structure.
 
-On Windows, if `psql` is not found, open PostgreSQL's **SQL Shell**, connect to the `postgres` database, and run this with your project path:
-
-```text
-\i 'C:/path/to/Deadware/server/database/setup.sql'
-```
+Enter the `postgres` administrator password chosen during installation first. Then choose the two game database passwords when prompted. Password input is hidden.
 
 Already have a Deadware database? Skip this step and keep your existing passwords.
 

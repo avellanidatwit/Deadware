@@ -21,7 +21,7 @@ export function parseAction(
   }
   if (["PICK_UP", "DROP", "EAT", "USE", "EQUIP"].includes(command) && parts.length === 2 && ITEM_TYPES.includes(parts[1] as ItemType)) {
     const itemType = parts[1] as ItemType;
-    if (command === "EAT" && itemType !== "food" || command === "USE" && !["bandage", "water"].includes(itemType) || command === "EQUIP" && !["weapon", "gun"].includes(itemType)) {
+    if (command === "EAT" && itemType !== "food" || command === "USE" && !["bandage", "water"].includes(itemType) || command === "EQUIP" && !["weapon", "gun", "armor"].includes(itemType)) {
       throw new SurvivorScriptError(`Unsupported item for ${command}.`, lineNumber);
     }
     return { type: "item", verb: command as "PICK_UP", itemType };

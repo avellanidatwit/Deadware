@@ -97,6 +97,7 @@ export function parseSurvivorScript(
     }
 
     rules.push({
+      actionSource: actionLine.text,
       condition,
       action,
     });

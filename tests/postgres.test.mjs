@@ -18,7 +18,7 @@ test('PostgreSQL: migrations, cookie auth, ownership, script history and exact r
   let server, closeSessions, secureServer, closeSecureSessions;
   try {
     await migrate(pool); await migrate(pool);
-    assert.equal((await pool.query('SELECT count(*) FROM schema_migrations')).rows[0].count, '1');
+    assert.equal((await pool.query('SELECT count(*) FROM schema_migrations')).rows[0].count, '2');
     const config = configuration({ DATABASE_PASSWORD: 'unused', SESSION_SECRET: 's'.repeat(32), NODE_ENV: 'test' });
     const repo = new WorldRepository(pool), world = new World(await repo.load()), runtime = new Runtime(world, repo);
     const app = await createApp(pool, runtime, config); closeSessions = app.closeSessions;
@@ -57,6 +57,17 @@ test('PostgreSQL: migrations, cookie auth, ownership, script history and exact r
     assert.equal((await request(`/survivors/${id}/script`, 'PUT', { script: 'OTHERWISE\n EXPLORE' }, cookie)).status, 200);
     const versions = (await pool.query('SELECT version,active FROM survivor_scripts WHERE survivor_id=$1 ORDER BY version', [id])).rows;
     assert.deepEqual(versions, [{ version: 1, active: false }, { version: 2, active: true }]);
+    const saved = await request('/scripts', 'POST', { ...creation, name: 'Library' }, cookie);
+    assert.equal(saved.status, 201); const pair = await saved.json();
+    assert.equal((await request(`/scripts/${pair.id}`, 'DELETE', {}, bobCookie)).status, 404);
+    assert.equal((await request(`/scripts/${pair.id}`, 'PUT', creation, bobCookie)).status, 404);
+    assert.equal((await request(`/scripts/${pair.id}`, 'PUT', { ...creation, zombieScript: 'INVALID' }, cookie)).status, 400);
+    assert.equal((await request(`/scripts/${pair.id}`, 'PUT', { ...creation, name: 'Updated' }, cookie)).status, 200);
+    assert.equal(new World(await repo.load()).scripts(alice.id)[0].name, 'Updated');
+    assert.equal((await request(`/scripts/${pair.id}`, 'DELETE', {}, cookie, 'https://evil.example')).status, 403);
+    assert.equal((await request(`/scripts/${pair.id}`, 'DELETE', {}, cookie)).status, 200);
+    assert.deepEqual(new World(await repo.load()).scripts(alice.id), []);
+    assert.equal(world.entities(alice.id).length, 1);
     const restored = new World(await repo.load()); assert.equal(encode(restored.state), encode(world.state));
     assert.equal((await request('/auth/logout', 'POST', {}, cookie)).status, 200);
     assert.equal((await request('/me', 'GET', undefined, cookie)).status, 401);

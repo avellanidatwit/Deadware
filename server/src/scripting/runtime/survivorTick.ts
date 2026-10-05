@@ -19,8 +19,10 @@ export function runSurvivorTick(program: SurvivorProgram, context: ScriptContext
   const action = runSurvivorProgram(program, context);
   const message = executeSurvivorAction(action, context);
   if (actor instanceof Survivor) {
-    const label = action.type === "targeted" || action.type === "item" ? action.verb : action.type;
-    actor.recordEvent(context.tick ?? 0, `${label}: ${message}`);
+    // Preserve the selected script line, including targets, ranges and arguments.
+    const source = program.rules.find(rule => rule.action === action)?.actionSource;
+    const fallback = action.type === "wait" ? "WAIT (no eligible rule matched)" : message;
+    actor.recordEvent(context.tick ?? 0, source ?? fallback);
   }
   return { action, message };
 }

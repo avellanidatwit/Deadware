@@ -13,7 +13,7 @@ export function evaluateCondition(
     case "not": return !evaluateCondition(condition.condition, context);
     case "stat": return context.survivor instanceof Survivor && compareNumbers(context.survivor[condition.stat], condition.operator, condition.value);
     case "hasItem": return context.survivor instanceof Survivor && context.survivor.inventory.some(item => item.type === condition.itemType);
-    case "equipped": return context.survivor instanceof Survivor && context.survivor.equippedItem?.type === condition.itemType;
+    case "equipped": return context.survivor instanceof Survivor && (condition.itemType === "armor" ? !!context.survivor.equippedArmor : context.survivor.equippedItem?.type === condition.itemType);
     case "remembered": return context.survivor instanceof Survivor && context.survivor.memory[condition.slot] !== undefined;
     case "count": return compareNumbers(resolveTargets(condition.target, context).length, condition.operator, condition.value);
     case "visible": return resolveTargets(condition.target, context).length > 0;

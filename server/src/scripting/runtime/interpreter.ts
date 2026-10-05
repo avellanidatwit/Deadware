@@ -1,3 +1,4 @@
+import { Survivor } from '../../entities/survivor.js';
 import type { SurvivorProgram, SurvivorAction } from "../language/types.js";
 import type { ScriptContext } from "./context.js";
 import { evaluateCondition } from "./conditionEvaluator.js";
@@ -25,6 +26,10 @@ export function runSurvivorProgram(
   // First matching rule wins.
 
   for (const rule of program.rules) {
+    // Skip impossible pickups so a blocked extra weapon cannot trap a priority script.
+    if (context.survivor instanceof Survivor &&
+        (rule.action.type === 'pickUpItems' || rule.action.type === 'item' && rule.action.verb === 'PICK_UP') &&
+        !context.survivor.canPickUpItems(context.grid, rule.action.type === 'item' ? rule.action.itemType : undefined)) continue;
     const movement = isMovement(rule.action);
     if (movement && (context.canMove === false || "stamina" in context.survivor && context.survivor.stamina < 2)) continue;
     if (
