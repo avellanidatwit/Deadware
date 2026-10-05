@@ -35,7 +35,7 @@ WHEN distance nearest door &gt; 1
 
 OTHERWISE
     EXPLORE</code></pre></section>
-<section><h2>3. Deploy and observe</h2><p>Press Inject survivor to queue a new survivor at a random free location, or select an active entity and press Update behavior. Return to World view to observe it. When a survivor dies, it rises at its corpse using its zombie program; its scripts are archived in your library. Zombies cannot be injected directly. Survivor movement happens every second update; on other updates the script can select a later interaction. A failed action still takes an update.</p></section>
+<section><h2>3. Deploy and observe</h2><p>Press Inject survivor to queue a new survivor at a random free location, or select an active entity and press Update behavior. Return to World view to observe it. When a survivor dies, it rises at its corpse using its zombie program; its scripts are archived in your library. Zombies cannot be injected directly. Movement continues between decisions at 1.0 tiles/second for survivors and 1.2 for zombies. New decisions can interrupt movement. A failed action still takes an update.</p></section>
 <section><h2>4. Give needs a priority</h2><p>The starter script places these rules above exploration and scavenging. Your survivor needs to find and carry the matching items first.</p><pre><code>WHEN health &lt; 40 AND hasItem bandage
     USE bandage
 

@@ -18,7 +18,7 @@ test('PostgreSQL: migrations, cookie auth, ownership, script history and exact r
   let server, closeSessions, secureServer, closeSecureSessions;
   try {
     await migrate(pool); await migrate(pool);
-    assert.equal((await pool.query('SELECT count(*) FROM schema_migrations')).rows[0].count, '2');
+    assert.equal((await pool.query('SELECT count(*) FROM schema_migrations')).rows[0].count, '3');
     const config = configuration({ DATABASE_PASSWORD: 'unused', SESSION_SECRET: 's'.repeat(32), NODE_ENV: 'test' });
     const repo = new WorldRepository(pool), world = new World(await repo.load()), runtime = new Runtime(world, repo);
     const app = await createApp(pool, runtime, config); closeSessions = app.closeSessions;
@@ -68,6 +68,13 @@ test('PostgreSQL: migrations, cookie auth, ownership, script history and exact r
     assert.equal((await request(`/scripts/${pair.id}`, 'DELETE', {}, cookie)).status, 200);
     assert.deepEqual(new World(await repo.load()).scripts(alice.id), []);
     assert.equal(world.entities(alice.id).length, 1);
+    await runtime.mutate(() => {
+      const actor = world.state.survivors.find(entity => entity.id === id);
+      world.state.grid.moveEntity(actor, actor.x + 0.125, actor.y);
+      actor.health = 99.5; world.vision();
+    });
+    const position = (await pool.query('SELECT x,health FROM survivors WHERE id=$1', [id])).rows[0];
+    assert.equal(position.x % 1, 0.125); assert.equal(position.health, 99.5);
     const restored = new World(await repo.load()); assert.equal(encode(restored.state), encode(world.state));
     assert.equal((await request('/auth/logout', 'POST', {}, cookie)).status, 200);
     assert.equal((await request('/me', 'GET', undefined, cookie)).status, 401);

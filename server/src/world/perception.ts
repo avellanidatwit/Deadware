@@ -15,13 +15,13 @@ export interface SearchOptions<T> extends SightOptions {
   requireLineOfSight?: boolean;
 }
 
-export function spatialDistance(a: Position, b: Position, metric: SightOptions["metric"] = "manhattan"): number {
+export function spatialDistance(a: Position, b: Position, metric: SightOptions["metric"] = "euclidean"): number {
   const dx = Math.abs(a.x - b.x), dy = Math.abs(a.y - b.y);
   return metric === "euclidean" ? Math.hypot(dx, dy) : metric === "chebyshev" ? Math.max(dx, dy) : dx + dy;
 }
 
 function validPosition(grid: Grid, position: Position): boolean {
-  return Number.isInteger(position.x) && Number.isInteger(position.y) && grid.isValidPosition(position.x, position.y);
+  return Number.isFinite(position.x) && Number.isFinite(position.y) && grid.isValidPosition(position.x, position.y);
 }
 
 /** Center-to-center grid ray. Both side tiles are checked at exact corner crossings. */
@@ -30,24 +30,25 @@ export function hasLineOfSight(grid: Grid, origin: Position, target: Position, o
   const range = options.range ?? Infinity;
   if (Number.isNaN(range) || range < 0 || spatialDistance(origin, target, options.metric) > range) return false;
   const blocks = options.blocksSight ?? (cell => cell.tileType === "buildingWall" || cell.tileType === "door");
+  const ox = Math.round(origin.x), oy = Math.round(origin.y), tx = Math.round(target.x), ty = Math.round(target.y);
   const blocked = (x: number, y: number): boolean => {
     const cell = grid.getCell(x, y);
     if (!cell) return true;
-    if (x === target.x && y === target.y && (options.includeBlockingTarget ?? true)) return false;
+    if (x === tx && y === ty && (options.includeBlockingTarget ?? true)) return false;
     return blocks(cell);
   };
-  if (origin.x === target.x && origin.y === target.y) return !blocked(target.x, target.y);
-  if (blocks(grid.getCell(origin.x, origin.y)!)) return false;
-  const dx = Math.abs(target.x - origin.x), dy = Math.abs(target.y - origin.y);
-  const sx = Math.sign(target.x - origin.x), sy = Math.sign(target.y - origin.y);
-  let x = origin.x, y = origin.y, ix = 0, iy = 0;
-  while (ix < dx || iy < dy) {
-    const crossing = (1 + 2 * ix) * dy - (1 + 2 * iy) * dx;
-    if (crossing === 0) {
+  if (blocks(grid.getCell(ox, oy)!)) return false;
+  let x = ox, y = oy;
+  const dx = target.x - origin.x, dy = target.y - origin.y, sx = Math.sign(dx), sy = Math.sign(dy);
+  const deltaX = dx ? 1 / Math.abs(dx) : Infinity, deltaY = dy ? 1 / Math.abs(dy) : Infinity;
+  let nextX = dx ? (x + sx * 0.5 - origin.x) / dx : Infinity;
+  let nextY = dy ? (y + sy * 0.5 - origin.y) / dy : Infinity;
+  while (x !== tx || y !== ty) {
+    if (Math.abs(nextX - nextY) < 1e-10) {
       if (blocked(x + sx, y) || blocked(x, y + sy)) return false;
-      x += sx; y += sy; ix++; iy++;
-    } else if (crossing < 0) { x += sx; ix++; }
-    else { y += sy; iy++; }
+      x += sx; y += sy; nextX += deltaX; nextY += deltaY;
+    } else if (nextX < nextY) { x += sx; nextX += deltaX; }
+    else { y += sy; nextY += deltaY; }
     if (blocked(x, y)) return false;
   }
   return true;

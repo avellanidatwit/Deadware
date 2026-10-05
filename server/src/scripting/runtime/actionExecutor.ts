@@ -80,7 +80,7 @@ function targeted(verb: string, target: Target, context: ScriptContext): boolean
   }
   if (verb === "OPEN") {
     const cell = grid.getCell(resolved.x, resolved.y);
-    if (!cell || spatialDistance(survivor, resolved) !== 1 || cell.tileType !== "door") return false;
+    if (!cell || spatialDistance(survivor, resolved) > 1.05 || cell.tileType !== "door") return false;
     cell.tileType = "openDoor";
     return true;
   }
@@ -121,7 +121,7 @@ export function executeSurvivorAction(action: SurvivorAction, context: ScriptCon
     case "pickUpItems": success = survivor.pickUpItems(grid).length > 0; break;
     case "searchContainer": success = targeted("SEARCH", { type: "container", selector: "nearest" }, context); break;
     case "lookFloor":
-      survivor.stamina = Math.min(100, survivor.stamina + 3);
+      if (!context.realtime) survivor.stamina = Math.min(100, survivor.stamina + 3);
       return survivor.lookAtFloor(grid, action.itemType).map(item => item.name).join(", ") || "No matching floor items.";
     case "item":
       if (action.verb === "PICK_UP") success = survivor.pickUpItems(grid, action.itemType).length > 0;
@@ -147,7 +147,7 @@ export function executeSurvivorAction(action: SurvivorAction, context: ScriptCon
     case "chase": break;
   }
   if (survivor.x !== before.x || survivor.y !== before.y) survivor.stamina = Math.max(0, survivor.stamina - 2);
-  else survivor.stamina = Math.min(100, survivor.stamina + 3);
+  else if (!context.realtime) survivor.stamina = Math.min(100, survivor.stamina + 3);
   survivor.updateVision(grid);
   return success ? `Survivor: ${action.type === "targeted" || action.type === "item" ? action.verb : action.type}.` : "Action unavailable: check target, reach, or inventory.";
 }

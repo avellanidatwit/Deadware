@@ -6,15 +6,15 @@ This is the living reference for the implemented simulation and SurvivorScript. 
 
 ## Game loop and world
 
-The server advances every 100 ms, independently of connected clients. Every sixth tick is an actor decision: survivors act first, then living zombies. Clients poll snapshots once per second. Refreshing a page does not reset state; restarting the server restores the PostgreSQL checkpoint. No catch-up simulation runs during server downtime. Survivor movement is permitted every second update (displayed ticks 2, 4, 6, ...); zombies can move each update. Each action consumes one update, including an unsuccessful action. Death stops all actions and removes the entity from the grid.
+The server advances continuous movement every 100 ms by default. Every sixth update evaluates scripts; movement intent persists between decisions. Survivors move at 1.0 tiles/second and zombies at 1.2, independent of decision frequency. Positions and interaction distances use decimal coordinates. Clients receive snapshots every 250 ms by default and interpolate confirmed server trajectories. Restarting restores positions, movement intent, stamina and cooldowns; downtime is not simulated.
 
-The generated city contains roads, buildings, doors, furniture, containers, cars and zombies. Distances use Manhattan distance, with inclusive boundaries. Walls and closed doors block sight; diagonal corner gaps do not grant sight. Closed doors and solid furniture block movement. Survivors see up to eight tiles; larger script ranges cannot extend this. The map remembers explored terrain. Survivor navigation uses revealed terrain, while EXPLORE visits revealed, unvisited interior floor tiles first, then seeks unexplored boundaries. The map uses dark unexplored tiles, gray remembered terrain, bright visible terrain, and red outlines along the current vision boundary. Entities and floor loot remain hidden outside current sight. An unreachable selected target makes that action fail; selection does not switch to another target automatically.
+The generated city contains roads, buildings, doors, furniture, containers, cars and zombies. Distances use Euclidean distance, with inclusive boundaries. Tile coordinates denote tile centers. Walls and closed doors block sight; diagonal corner gaps do not grant sight. Closed doors and solid furniture block movement. Survivors see up to eight tiles; larger script ranges cannot extend this. The map remembers explored terrain. Survivor navigation uses revealed terrain, while EXPLORE visits revealed, unvisited interior floor tiles first, then seeks unexplored boundaries. The map uses dark unexplored tiles, gray remembered terrain, bright visible terrain, and red outlines along the current vision boundary. Entities and floor loot remain hidden outside current sight. An unreachable selected target makes that action fail; selection does not switch to another target automatically.
 
 ## SurvivorScript language
 
 Scripts are case-sensitive. `WHEN` introduces a condition, followed by exactly one action line. `OTHERWISE` is unconditional and should come last. Blank lines and lines starting with `#` are ignored; indentation is optional. Invalid syntax reports the original source line. Empty programs wait. No loops, functions, parentheses, arbitrary variables, or multi-action blocks are supported: the simulation tick is the loop.
 
-Every tick, rules are evaluated top to bottom. The first matching rule selects its action. Movement rules are skipped during cooldown or when stamina is below two, so a later matching interaction can execute. If nothing can be selected, the survivor waits. Target availability is checked during execution; a missing target consumes the selected action rather than silently changing priorities.
+Every decision tick, rules are evaluated top to bottom. The first matching rule selects its action. Movement rules are skipped when stamina is below two, so a later matching interaction can execute. There is no alternating movement cooldown. If nothing can be selected, the survivor waits. Target availability is checked during execution; a missing target consumes the selected action rather than silently changing priorities.
 
 Boolean precedence is `NOT`, then `AND`, then `OR`, with short-circuit evaluation. For more complex expressions use multiple rules. Zombie CHASE derives its range from positive survivorNearby conditions in the first true OR branch, taking the minimum within an AND expression; NOT does not supply a chase range.
 
@@ -207,3 +207,24 @@ Armor vests block 5 damage per combat hit, to a minimum of zero damage. Equip on
 The View selector also offers All zombies: the server combines current sight from the signed-in player's living zombies. Other players' entities never contribute sight. Hovering or tapping an owned zombie selects its sidebar stats, which remain selected across snapshot updates until another zombie is selected.
 
 Pickup rules are skipped when no matching floor item can be carried (including an extra weapon blocked by the one-weapon limit). Later matching rules can run instead. `itemsOnFloor` still detects all floor items.
+
+
+## Continuous movement
+
+Scripts select persistent movement intents, interrupted by a different movement or interaction decision. Repeating the same command keeps the path rather than restarting it. Grid pathfinding supplies cardinal waypoints through revealed terrain; actors follow them using floating-point coordinates. A radius of 0.22 tiles prevents walls, closed doors, furniture and living actors from being crossed. Blocked actors stop and retry; crowd congestion can still require a different route. Target tracking is refreshed at path segments and decisions, with continuous arrival and line-of-sight checks. Combat uses a 0.6-second attack cooldown and actual distance.
+
+Prefix a survivor movement command with `SPRINT`, for example:
+
+```text
+WHEN zombieNearby 6 AND stamina > 20
+    SPRINT MOVE_AWAY nearest zombie
+
+OTHERWISE
+    EXPLORE
+```
+
+Sprint raises the survivor speed to 1.6 tiles/second for up to three seconds. It requires 20 stamina to start, consumes 10 stamina per tile, ends when exhausted, and can start again eight seconds after activation. During cooldown the same command walks normally. Zombies cannot sprint. No command teleports an entity.
+
+The browser renders with requestAnimationFrame, replaying bounded server movement traces slightly behind the simulation. It follows intermediate corners and does not extrapolate during network stalls. Hidden actors and hidden trajectory sections are excluded by the server; sprites are clipped to the current sight mask. Website layout and controls are unchanged.
+
+Migration 003 changes survivor coordinates and health columns to double precision. Older integer-position world checkpoints load at their existing coordinates, with default speed and cooldown values. Back up the database before switching versions; reverting source alone does not restore earlier game progress.

@@ -1,3 +1,4 @@
+import type { Motion } from '../simulation/movement.js';
 import { ITEM_CATALOG } from '../data/itemCatalog.js';
 import type { Grid, GridEntity } from "../world/grid.js";
 import { ItemContainer } from "./container.js";
@@ -10,6 +11,12 @@ export interface SurvivorEvent { tick: number; message: string }
 export class Survivor implements GridEntity {
   public readonly symbol = "S";
 
+  public motion?: Motion;
+  public speed = 1;
+  public radius = 0.22;
+  public attackReadyAt = 0;
+  public sprintUntil = 0;
+  public sprintReadyAt = 0;
   public health = 100;
   public kills = 0;
   public maxHealth = 100;
@@ -101,15 +108,16 @@ export class Survivor implements GridEntity {
   private exploredTiles = new Set<string>();
   private visibleTiles = new Set<string>();
   private visitedTiles = new Set<string>();
+  hasVisited(x: number, y: number): boolean { return this.visitedTiles.has(`${x},${y}`); }
   hasExplored(x: number, y: number): boolean { return this.exploredTiles.has(`${x},${y}`); }
   canSee(x: number, y: number): boolean { return this.visibleTiles.has(`${x},${y}`); }
 
   updateVision(grid: Grid): void {
     this.visibleTiles.clear();
     if (!this.isAlive()) return;
-    this.visitedTiles.add(`${this.x},${this.y}`);
-    for (let y = Math.max(0, this.y - this.sightRange); y <= Math.min(grid.height - 1, this.y + this.sightRange); y++) {
-      for (let x = Math.max(0, this.x - this.sightRange); x <= Math.min(grid.width - 1, this.x + this.sightRange); x++) {
+    this.visitedTiles.add(`${Math.round(this.x)},${Math.round(this.y)}`);
+    for (let y = Math.max(0, Math.floor(this.y - this.sightRange)); y <= Math.min(grid.height - 1, this.y + this.sightRange); y++) {
+      for (let x = Math.max(0, Math.floor(this.x - this.sightRange)); x <= Math.min(grid.width - 1, this.x + this.sightRange); x++) {
         if (hasLineOfSight(grid, this, { x, y }, { range: this.sightRange })) {
           this.visibleTiles.add(`${x},${y}`);
           this.exploredTiles.add(`${x},${y}`);
@@ -124,7 +132,7 @@ export class Survivor implements GridEntity {
     if (!this.isAlive()) return false;
     const offsets = [[0, -1], [0, 1], [1, 0], [-1, 0]];
     const queue: { x: number; y: number; first?: { x: number; y: number } }[] = [{ x: this.x, y: this.y }];
-    const seen = new Set([`${this.x},${this.y}`]);
+    const seen = new Set([`${Math.round(this.x)},${Math.round(this.y)}`]);
     let frontierStep: { x: number; y: number } | undefined;
     for (let index = 0; index < queue.length; index++) {
       const current = queue[index];
@@ -184,7 +192,7 @@ export class Survivor implements GridEntity {
     for (const container of this.findContainers(grid, range).filter(container => container.contents.length > 0)) {
       if (spatialDistance(this, container) === 1) return false;
       const queue: { x: number; y: number; first?: { x: number; y: number } }[] = [{ x: this.x, y: this.y }];
-      const seen = new Set([`${this.x},${this.y}`]);
+      const seen = new Set([`${Math.round(this.x)},${Math.round(this.y)}`]);
       for (let i = 0; i < queue.length; i++) {
         const current = queue[i];
         if (spatialDistance(current, container) === 1 && current.first) {
@@ -228,7 +236,7 @@ export class Survivor implements GridEntity {
   findNearbyDoors(grid: Grid) {
     return searchCells(grid, this, {
       range: 1,
-      predicate: cell => cell.tileType === "door" && spatialDistance(this, cell) === 1,
+      predicate: cell => cell.tileType === "door" && spatialDistance(this, cell) <= 1.05,
     });
   }
 
@@ -249,7 +257,7 @@ export class Survivor implements GridEntity {
   /** null means out of reach/unavailable; [] means a valid but empty container. */
   searchContainer(grid: Grid, container: ItemContainer): Item[] | null {
     const floor = grid.getCell(this.x, this.y);
-    if (!this.isAlive() || !floor || spatialDistance(this, container) !== 1 ||
+    if (!this.isAlive() || !floor || spatialDistance(this, container) > 1.05 ||
         !grid.getCell(container.x, container.y)?.entities.includes(container) ||
         !hasLineOfSight(grid, this, container)) return null;
     const items = container.empty();

@@ -110,3 +110,10 @@ Database integration tests require `TEST_DATABASE_URL` pointing to a disposable 
 - Do not commit `.env`, database files, or generated folders such as `node_modules/`, `dist/`, and `web-dist/`.
 
 See [the game and scripting guide](docs/DESIGN.md) for SurvivorScript and simulation details. Code lives in `client/` (website), `server/` (API and game), and `shared/` (shared types).
+
+
+## Real-time movement
+
+Movement runs continuously between script decisions. Survivors walk at 1.0 tiles/second; zombies move at 1.2. Use `SPRINT MOVE_AWAY nearest zombie` for a temporary survivor speed of 1.6 (three seconds, stamina cost, eight-second cooldown). Existing scripts still work.
+
+After updating, run `npm run db:migrate`, restart the API and refresh the website. Back up PostgreSQL first: this update stores decimal positions and health. See [the movement rules](docs/DESIGN.md#continuous-movement) for details.

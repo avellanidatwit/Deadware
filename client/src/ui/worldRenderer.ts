@@ -13,7 +13,7 @@ const rememberedColors: Record<TileType, string> = {
 const tileSize = 16;
 
 /** Terrain stays remembered; entities and loose loot require current sight. */
-export function drawWorld(ctx: CanvasRenderingContext2D, grid: ViewGrid, survivor: ViewObserver): void {
+export function drawWorld(ctx: CanvasRenderingContext2D, grid: ViewGrid, survivor: ViewObserver, positions: Map<string, {x:number;y:number}> = new Map()): void {
   ctx.font = "bold 12px monospace";
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
@@ -30,7 +30,7 @@ export function drawWorld(ctx: CanvasRenderingContext2D, grid: ViewGrid, survivo
       ctx.fillStyle = "#f1d878";
       ctx.fillText("*", px + 8, py + 8);
     }
-    const entities = cell.entities.filter(entity => visible);
+    const entities = cell.entities.filter(entity => visible && !['S','Z'].includes(entity.symbol));
     entities.forEach((entity, index) => {
       const width = tileSize / entities.length;
       ctx.fillStyle = entity.symbol === "S" ? "#79e5ab" : entity.symbol === "F" ? "#a38c70" : entity.symbol === "C" ? "#b594d6" : "#ef7777";
@@ -39,6 +39,22 @@ export function drawWorld(ctx: CanvasRenderingContext2D, grid: ViewGrid, survivo
       ctx.fillText("name" in entity && entity.name === "Car" ? "V" : entity.symbol, px + (index + 0.5) * width, py + 8, width);
     });
   }
+
+  // Moving actors are drawn after all terrain so neighboring tiles cannot erase them.
+  // Clip sprites to the permitted sight mask, including during interpolation.
+  ctx.save(); ctx.beginPath();
+  for (let y=0;y<grid.height;y++) for(let x=0;x<grid.width;x++) if(survivor.canSee(x,y)) ctx.rect(x*tileSize,y*tileSize,tileSize,tileSize);
+  ctx.clip();
+  for(let y=0;y<grid.height;y++) for(let x=0;x<grid.width;x++) {
+    if(!survivor.canSee(x,y)) continue;
+    for(const entity of grid.getCell(x,y)?.entities ?? []) {
+      if(!['S','Z'].includes(entity.symbol)) continue;
+      const p=positions.get(entity.id) ?? entity, px=(p.x+0.5)*tileSize, py=(p.y+0.5)*tileSize;
+      ctx.fillStyle=entity.symbol==='S'?'#79e5ab':'#ef7777';
+      ctx.fillRect(px-5,py-5,10,10); ctx.fillStyle='#101719';ctx.fillText(entity.symbol,px,py,10);
+    }
+  }
+  ctx.restore();
 
   // Draw only exposed edges in a final pass so later tiles cannot cover the outline.
   ctx.fillStyle = "#f06464";

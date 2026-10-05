@@ -76,7 +76,7 @@ export function parseSurvivorScript(
         if (!options.unlockedCapabilities.includes(capability)) throw new SurvivorScriptError(`Capability locked: ${capability}.`, currentLine.lineNumber);
       }
     }
-    if (actor === "zombie" && (["targeted", "item", "remember", "reload"].includes(action.type) || conditions.some(part => ["stat", "hasItem", "equipped", "count", "visible", "distance", "remembered"].includes(part.type)))) {
+    if (actor === "zombie" && (["targeted", "item", "remember", "reload", "sprint"].includes(action.type) || conditions.some(part => ["stat", "hasItem", "equipped", "count", "visible", "distance", "remembered"].includes(part.type)))) {
       throw new SurvivorScriptError("This capability requires a survivor script.", currentLine.lineNumber);
     }
     if (actor === "zombie" && (action.type === "openDoor" || conditions.some(part => part.type === "nearbydoor"))) {

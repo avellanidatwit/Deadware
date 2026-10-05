@@ -10,4 +10,5 @@ export interface ScriptContext {
   /** Skip movement rules while on cooldown, allowing later non-movement rules. */
   canMove?: boolean;
   tick?: number;
+  realtime?: boolean;
 }

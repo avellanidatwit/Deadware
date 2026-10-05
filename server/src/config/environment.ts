@@ -11,7 +11,7 @@ export function configuration(env: NodeJS.ProcessEnv = process.env) {
     CLIENT_ORIGIN: z.string().url().default('http://localhost:5173'),
     COOKIE_SAME_SITE: z.enum(['lax', 'strict', 'none']).default('lax'),
     SIMULATION_TICK_MS: integer(100, 20, 10000), DECISION_TICKS: integer(6, 1, 100),
-    CHECKPOINT_MS: integer(30000, 1000, 300000), CLIENT_POLL_MS: integer(1000, 250, 60000),
+    CHECKPOINT_MS: integer(30000, 1000, 300000), CLIENT_POLL_MS: integer(250, 100, 60000),
   }).parse(env);
   if (value.CLIENT_ORIGIN !== new URL(value.CLIENT_ORIGIN).origin) throw new Error('CLIENT_ORIGIN must be an exact origin without a trailing slash or path.');
   if (value.COOKIE_SAME_SITE === 'none' && value.NODE_ENV !== 'production') throw new Error('Cross-site cookies require production HTTPS.');

@@ -1,6 +1,8 @@
 export interface Item { id: string; type: 'food' | 'weapon' | 'bandage' | 'water' | 'gun' | 'ammo' | 'armor'; name: string; catalogKey: string }
 export type TileType = 'empty' | 'road' | 'buildingWall' | 'buildingFloor' | 'door' | 'openDoor';
-export interface GridEntity { id: string; x: number; y: number; symbol: string; blocksMovement?: boolean }
+export interface MotionSample { time: number; x: number; y: number }
+export interface GridEntity {
+  motion?: MotionSample[]; id: string; x: number; y: number; symbol: string; blocksMovement?: boolean }
 export interface GridCell { x: number; y: number; tileType: TileType; entities: GridEntity[]; items: Item[] }
 export interface PublicActor {
   id: string; kind: 'survivor' | 'zombie'; name: string; ownerName: string;
@@ -11,7 +13,7 @@ export interface ViewCell extends Omit<GridCell, 'entities'> {
   entities: (GridEntity & { name?: string; actor?: PublicActor })[];
 }
 export interface WorldSnapshot {
-  tick: number; width: number; height: number;
+  time?: number; tick: number; width: number; height: number;
   cells: ViewCell[];
   zombieObservers?: (PublicActor & { x: number; y: number; sightRange: number; message: string })[];
   entities: { id: string; kind: 'survivor' | 'zombie'; name: string; health: number }[];

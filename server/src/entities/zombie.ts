@@ -1,8 +1,13 @@
+import type { Motion } from '../simulation/movement.js';
 import type { GridEntity } from "../world/grid.js";
 
 export class Zombie implements GridEntity {
   public readonly symbol = "Z";
 
+  public motion?: Motion;
+  public speed = 1.2;
+  public radius = 0.22;
+  public attackReadyAt = 0;
   public health = 100;
   public kills = 0;
   public maxHealth = 100;

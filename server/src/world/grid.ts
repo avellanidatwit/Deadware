@@ -59,16 +59,15 @@ export class Grid {
       return null;
     }
 
-    return this.cells[y][x];
+    return this.cells[Math.round(y)]?.[Math.round(x)] ?? null;
   }
 
   // Check whether coordinates are inside the map
   isValidPosition(x: number, y: number): boolean {
     return (
-      x >= 0 &&
-      x < this.width &&
-      y >= 0 &&
-      y < this.height
+      Number.isFinite(x) && Number.isFinite(y) &&
+      x >= -0.49 && x < this.width - 0.5 &&
+      y >= -0.49 && y < this.height - 0.5
     );
   }
 

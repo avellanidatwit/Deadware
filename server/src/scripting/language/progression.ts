@@ -6,6 +6,7 @@ export const progressionStages: readonly (readonly Capability[])[] = [
 
 /** Optional scenario restrictions; the sandbox exposes the complete language. */
 export function requiredCapabilities(condition: Condition, action: SurvivorAction): Set<Capability> {
+  if (action.type === "sprint") return requiredCapabilities(condition, action.action);
   const needed = new Set<Capability>();
   function visit(part: Condition): void {
     if (part.type === "and" || part.type === "or") { needed.add("logic"); part.conditions.forEach(visit); }

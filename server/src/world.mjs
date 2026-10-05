@@ -6,8 +6,8 @@ import { Furniture } from './entities/furniture.js';
 import { Car } from './entities/car.js';
 import { generateCity } from './world/city.js';
 import { survivorCode } from './data/survivorProgram.js';
-import { parseSurvivorScript, runSurvivorTick } from './scripting/survivorScript.js';
-import { runZombieTick } from './scripting/zombieScript.js';
+import { parseSurvivorScript } from './scripting/survivorScript.js';
+import { decideActor, moveActors } from './simulation/movement.js';
 import { conditionLeaves } from './scripting/language/conditions.js';
 import { randomUUID } from 'node:crypto';
 import { hasLineOfSight } from './world/perception.js';
@@ -70,6 +70,11 @@ export class World {
     for (const entity of this.state.survivors) this.state.meta[entity.id].zombieScript ??= defaultZombieScript;
     for (const survivor of this.state.survivors) survivor.normalizeEquipment(this.state.grid);
     this.programs = new Map([...this.state.survivors, ...this.state.zombies].map(e => [e.id, compile(e.program, e.symbol === 'S' ? 'survivor' : 'zombie')]));
+    for (const actor of [...this.state.survivors, ...this.state.zombies]) {
+      actor.speed ??= actor instanceof Survivor ? 1 : 1.2; actor.radius ??= 0.22; actor.attackReadyAt ??= 0;
+      if (actor instanceof Survivor) { actor.sprintUntil ??= 0; actor.sprintReadyAt ??= 0; }
+    }
+    this.trails = new Map();
     this.vision();
   }
   vision() { for (const s of this.state.survivors) s.updateVision(this.state.grid); }
@@ -161,6 +166,22 @@ export class World {
     const s = this.state;
     const decisionTicks = s.timing?.decisionTicks ?? 6;
     s.tick++;
+    const seconds = (s.timing?.tickMs ?? 100) / 1000, time = s.tick * seconds;
+    const context = actor => ({ grid: s.grid, survivor: actor, survivors: s.survivors, zombies: s.zombies,
+      tick: Math.floor(s.tick / decisionTicks), detectionRange: actor.detectionRange, realtime: true });
+    for (const actor of [...s.survivors, ...s.zombies]) {
+      const trail = this.trails.get(actor.id) ?? [];
+      trail.push({time: time-seconds, x: actor.x, y: actor.y}); this.trails.set(actor.id, trail.slice(-128));
+    }
+    moveActors(s.grid, [...s.survivors, ...s.zombies], time, seconds, context, (actor, at) => {
+      const trail = this.trails.get(actor.id) ?? []; trail.push({time:at, x:actor.x, y:actor.y}); this.trails.set(actor.id,trail.slice(-128));
+    });
+    for (const survivor of s.survivors) if (survivor.isAlive()) {
+      survivor.hunger = Math.min(100, survivor.hunger + 0.25 * seconds);
+      survivor.thirst = Math.min(100, survivor.thirst + (0.25 / 0.6) * seconds);
+      if (survivor.hunger >= 100 || survivor.thirst >= 100) survivor.takeDamage(seconds / 0.6, true);
+    }
+    this.raiseDead(); this.vision();
     if (s.tick % decisionTicks !== 0) return;
     const request = s.queue[0];
     if (request) {
@@ -177,8 +198,7 @@ export class World {
         this.programs.set(entity.id, compile(entity.program, request.kind)); s.queue.shift();
       }
     }
-    for (const survivor of s.survivors) s.meta[survivor.id].message = runSurvivorTick(this.programs.get(survivor.id), { survivor, survivors: s.survivors, zombies: s.zombies, grid: s.grid, tick: s.tick / decisionTicks - 1, canMove: s.tick % (decisionTicks * 2) === 0 }).message;
-    for (const zombie of s.zombies) runZombieTick(zombie, this.programs.get(zombie.id), s.grid, s.survivors, s.zombies, s.tick);
+    for (const actor of [...s.survivors, ...s.zombies]) s.meta[actor.id].message = decideActor(this.programs.get(actor.id), context(actor), time);
     this.raiseDead();
     for (const entity of [...s.survivors, ...s.zombies]) if (!entity.isAlive()) s.meta[entity.id].diedTick ??= s.tick;
     this.vision();
@@ -200,8 +220,8 @@ export class World {
     const zombieSight = new Set();
     for (const zombie of observers) {
       const range = zombie.detectionRange;
-      for (let y = Math.max(0, zombie.y - range); y <= Math.min(s.grid.height - 1, zombie.y + range); y++) {
-        for (let x = Math.max(0, zombie.x - range); x <= Math.min(s.grid.width - 1, zombie.x + range); x++) {
+      for (let y = Math.max(0, Math.floor(zombie.y - range)); y <= Math.min(s.grid.height - 1, zombie.y + range); y++) {
+        for (let x = Math.max(0, Math.floor(zombie.x - range)); x <= Math.min(s.grid.width - 1, zombie.x + range); x++) {
           const key = `${x},${y}`;
           if (!zombieSight.has(key) && hasLineOfSight(s.grid, zombie, { x, y }, { range })) zombieSight.add(key);
         }
@@ -212,10 +232,18 @@ export class World {
       const cell = s.grid.getCell(x, y);
       const visible = allZombies ? zombieSight.has(`${x},${y}`) : isSurvivor ? observer.canSee(x, y) : !!observer?.isAlive() && hasLineOfSight(s.grid, observer, { x, y }, { range: observer.detectionRange });
       const explored = isSurvivor ? observer.hasExplored(x, y) : visible;
-      cells.push({ x, y, visible, explored, tileType: explored ? cell.tileType : 'empty', items: visible ? cell.items : [], entities: visible ? cell.entities.map(e => ({ id: e.id, x, y, symbol: e.symbol,
+      cells.push({ x, y, visible, explored, tileType: explored ? cell.tileType : 'empty', items: visible ? cell.items : [], entities: visible ? cell.entities.map(e => ({ id: e.id, x: e.x, y: e.y, symbol: e.symbol,
         ...(e instanceof Survivor || e instanceof Zombie ? { name: s.meta[e.id].name, actor: publicActor(e) } : { name: e.name }) })) : [] });
     }
-    return { tick: s.tick, width: s.grid.width, height: s.grid.height, cells,
+    // Only send trajectory sections inside currently permitted sight, never hidden routes.
+    const visibleKeys = new Set(cells.filter(cell => cell.visible).map(cell => `${cell.x},${cell.y}`));
+    for (const cell of cells) for (const entity of cell.entities) if (entity.actor) {
+      const trail = this.trails.get(entity.id) ?? [];
+      let start = 0;
+      for (let i = 0; i < trail.length; i++) if (!visibleKeys.has(`${Math.round(trail[i].x)},${Math.round(trail[i].y)}`)) start = i + 1;
+      entity.motion = trail.slice(start);
+    }
+    return { time: s.tick * (s.timing?.tickMs ?? 100) / 1000, tick: s.tick, width: s.grid.width, height: s.grid.height, cells,
       ...(allZombies ? { zombieObservers: observers.map(zombie => ({ ...publicActor(zombie), x: zombie.x, y: zombie.y,
         sightRange: zombie.detectionRange, message: 'Zombie program is running.' })) } : {}),
       entities: this.entities(owner).map(({ id, kind, name, health }) => ({ id, kind, name, health })),

@@ -7,6 +7,7 @@ export type Direction =
   | "west";
 
 export type SurvivorAction =
+  | { type: "sprint"; action: SurvivorAction }
   | { type: "targeted"; verb: "MOVE_TO" | "MOVE_AWAY" | "ATTACK" | "SHOOT" | "SEARCH" | "OPEN" | "FOLLOW" | "RETURN" | "PATROL"; target: Target }
   | { type: "item"; verb: "PICK_UP" | "DROP" | "EAT" | "USE" | "EQUIP"; itemType: ItemType }
   | { type: "remember"; slot: MemorySlot; target: Target | "position" }

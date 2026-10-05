@@ -7,6 +7,13 @@ export function parseAction(
   text: string,
   lineNumber: number
 ): SurvivorAction {
+  if (text.startsWith('SPRINT ')) {
+    const action = parseAction(text.slice(7).trim(), lineNumber);
+    if (!['move', 'moveAway', 'moveToContainer', 'explore', 'wander'].includes(action.type) &&
+      !(action.type === 'targeted' && ['MOVE_TO','MOVE_AWAY','FOLLOW','RETURN','PATROL'].includes(action.verb)))
+      throw new SurvivorScriptError('SPRINT must prefix a movement action.', lineNumber);
+    return { type: 'sprint', action };
+  }
   const parts = text.split(/\s+/);
 
   const command = parts[0];

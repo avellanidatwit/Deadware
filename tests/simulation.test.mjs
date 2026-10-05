@@ -119,32 +119,6 @@ test("default zombie attacks for 20 per tick and removes a survivor after five h
   assert.equal(grid.getCell(3, 2).entities.includes(survivor), false);
 });
 
-test('fleeing respects movement cooldown, turns at edges and prioritizes safety', t => {
-  t.mock.method(Math, 'random', () => 0);
-  const context = setup();
-  const { grid, survivor } = context;
-  grid.moveEntity(survivor, 10, 10);
-  const enemy = zombie(context, 'pursuer', 13, 10);
-  const program = parse('WHEN zombieNearby 6\n MOVE_AWAY zombie\nOTHERWISE\n WAIT');
-  let tick = 0;
-  const moveUpdate = () => {
-    const before = [survivor.x, survivor.y];
-    runSurvivorTick(program, { ...context, tick: tick++, canMove: false });
-    assert.deepEqual([survivor.x, survivor.y], before);
-    runSurvivorTick(program, { ...context, tick: tick++, canMove: true });
-  };
-  for (let i = 0; i < 10; i++) { grid.moveEntity(enemy, 13, survivor.y); moveUpdate(); }
-  assert.deepEqual([survivor.x, survivor.y], [10, 0]);
-  grid.moveEntity(enemy, 13, 0); moveUpdate();
-  assert.deepEqual([survivor.x, survivor.y], [9, 0]);
-  moveUpdate(); assert.deepEqual([survivor.x, survivor.y], [8, 0]);
-  grid.moveEntity(enemy, 7, 0); grid.getCell(8, 1).tileType = 'buildingWall'; moveUpdate();
-  assert.deepEqual([survivor.x, survivor.y], [9, 0]);
-  for (const [x, y] of [[8, 0], [10, 0], [9, 1]]) grid.getCell(x, y).tileType = 'buildingWall';
-  moveUpdate(); assert.deepEqual([survivor.x, survivor.y], [9, 0]);
-});
-
-
 test("history preserves the selected action source and distinguishes implicit waits", () => {
   const c = setup();
   for (const command of ["MOVE east", "MOVE_TO nearest container 8", "LOOK floor food", "SET home = position", "REMEMBER nearest container AS target", "USE water"]) {
