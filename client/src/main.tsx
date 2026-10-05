@@ -108,6 +108,10 @@ function App() {
         <button className="secondary" disabled={busy} onClick={async () => { setBusy(true); try { await request('/scripts', 'POST', { name, script, zombieScript }); setMessage('Programs saved to your library.'); } catch (error) { failure(error); } finally { setBusy(false); } }}>Save programs to library</button>
       </section><section><h2>World view</h2><p>{world?.observer ? `${world.observer.name} · ${world.observer.health}/${world.observer.maxHealth} HP · ${world.observer.message}` : 'Inject a survivor to begin exploring.'}</p>
         <MapView world={world}/><p className="muted">Only your entity’s perception and explored terrain are shown.</p>
+        {world?.observer?.kind === 'survivor' && <section className="history" aria-labelledby="history-heading">
+          <h3 id="history-heading">Survivor history</h3>
+          {world.observer.history?.length ? <ol>{[...world.observer.history].reverse().map((event, index) => <li key={`${event.tick}-${index}`}><span>Decision {event.tick}</span>{event.message}</li>)}</ol> : <p className="muted">No decisions recorded yet.</p>}
+        </section>}
       </section></div></>}
   </main>;
 }

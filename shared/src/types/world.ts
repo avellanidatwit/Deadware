@@ -14,5 +14,5 @@ export interface WorldSnapshot {
   tick: number; width: number; height: number;
   cells: ViewCell[];
   entities: { id: string; kind: 'survivor' | 'zombie'; name: string; health: number }[];
-  observer: (PublicActor & { x: number; y: number; sightRange: number; hunger?: number; thirst?: number; stamina?: number; ammo?: number; equippedItemId?: string; inventory?: Item[]; floor?: Item[]; message: string }) | null;
+  observer: (PublicActor & { x: number; y: number; sightRange: number; hunger?: number; thirst?: number; stamina?: number; ammo?: number; equippedItemId?: string; inventory?: Item[]; floor?: Item[]; history?: { tick: number; message: string }[]; message: string }) | null;
 }

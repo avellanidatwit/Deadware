@@ -124,6 +124,7 @@ export class World {
       s.grid.getCell(zombie.x, zombie.y).entities.push(zombie);
       s.zombies.push(zombie); meta.zombieId = zombie.id;
       meta.diedTick ??= s.tick;
+      survivor.recordEvent(s.tick, 'Died and rose as a zombie.');
       meta.message = 'Dead. Rose as a zombie.';
       s.meta[zombie.id] = { owner: meta.owner, name: `${meta.name} (zombie)`, bornTick: s.tick, version: 1, sourceSurvivorId: survivor.id, message: 'Rose from a survivor.' };
       this.programs.set(zombie.id, compile(zombie.program, 'zombie'));
@@ -146,11 +147,12 @@ export class World {
         const entity = new Survivor(request.id, position.x, position.y, request.script);
         s.grid.addEntity(entity); s.survivors.push(entity);
         s.meta[entity.id] = { owner: request.owner, name: request.name, bornTick: s.tick, zombieScript: request.zombieScript ?? defaultZombieScript, version: 1, message: 'Injected.' };
+        entity.recordEvent(s.tick, 'Injected into the world.');
         this.programs.set(entity.id, compile(entity.program, request.kind)); s.queue.shift();
       }
     }
     for (const survivor of s.survivors) s.meta[survivor.id].message = runSurvivorTick(this.programs.get(survivor.id), { survivor, survivors: s.survivors, zombies: s.zombies, grid: s.grid, tick: s.tick / decisionTicks - 1, canMove: s.tick % (decisionTicks * 2) === 0 }).message;
-    for (const zombie of s.zombies) runZombieTick(zombie, this.programs.get(zombie.id), s.grid, s.survivors, s.zombies);
+    for (const zombie of s.zombies) runZombieTick(zombie, this.programs.get(zombie.id), s.grid, s.survivors, s.zombies, s.tick);
     this.raiseDead();
     for (const entity of [...s.survivors, ...s.zombies]) if (!entity.isAlive()) s.meta[entity.id].diedTick ??= s.tick;
     this.vision();
@@ -182,6 +184,7 @@ export class World {
         x: observer.x, y: observer.y, health: observer.health, maxHealth: observer.maxHealth,
         sightRange: isSurvivor ? observer.sightRange : observer.detectionRange,
         ...(isSurvivor ? { hunger: observer.hunger, thirst: observer.thirst, stamina: observer.stamina, ammo: observer.ammo, equippedItemId: observer.equippedItemId, inventory: observer.inventory, floor: observer.lookAtFloor(s.grid) } : {}),
+        ...(isSurvivor ? { history: observer.history } : {}),
         message: !observer.isAlive() ? 'Dead. No longer acting.' : isSurvivor ? s.meta[observer.id].message : 'Zombie program is running.' } : null };
   }
 }

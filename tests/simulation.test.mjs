@@ -9,6 +9,7 @@ import { createItem } from "../dist/server/src/entities/item.js";
 import { parseSurvivorScript as parse, runSurvivorProgram as select, runSurvivorTick, executeSurvivorAction } from "../dist/server/src/scripting/survivorScript.js";
 import { runZombieTick } from "../dist/server/src/scripting/zombieScript.js";
 import { resolveTargets } from "../dist/server/src/scripting/runtime/targetResolver.js";
+import { World, encode } from "../dist/server/src/world.mjs";
 
 function setup() {
   const grid = new Grid(20, 12), survivor = new Survivor("s", 2, 2);
@@ -92,6 +93,18 @@ OTHERWISE
   assert.equal(buildingGrid.getCell(6, 7).tileType, "openDoor");
   assert.equal(visitedInterior.size, 9, "explore walks through the whole accessible interior");
 
+});
+
+test("survivor history records decisions and persists through recovery", () => {
+  const c = setup();
+  c.survivor.program = "OTHERWISE\n WAIT";
+  runSurvivorTick(parse("OTHERWISE\n WAIT"), { ...c, tick: 7 });
+  assert.deepEqual(c.survivor.history.at(-1), { tick: 7, message: "wait: Survivor: wait." });
+  for (let tick = 8; tick < 120; tick++) c.survivor.recordEvent(tick, `Event ${tick}`);
+  assert.equal(c.survivor.history.length, 100);
+  assert.equal(c.survivor.history[0].tick, 20);
+  const restored = new World(encode({ grid: c.grid, survivors: [c.survivor], zombies: [], tick: 120, queue: [], meta: { s: { owner: "owner", name: "Scout", version: 1, zombieScript: "OTHERWISE\n WAIT" } } }));
+  assert.deepEqual(restored.state.survivors[0].history, c.survivor.history);
 });
 
 test("default zombie attacks for 20 per tick and removes a survivor after five hits", () => {

@@ -10,5 +10,5 @@
     "esModuleInterop": true,
     "skipLibCheck": true
   },
-  "include": ["server/src/**/*", "client/src/legacy.ts", "client/src/ui/**/*.ts", "shared/src/**/*.ts"]
+  "include": ["server/src/**/*", "shared/src/**/*.ts"]
 }

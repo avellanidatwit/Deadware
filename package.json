@@ -4,14 +4,13 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "tsc && tsc -p client/tsconfig.json",
+    "build": "npm run build:server && tsc -p client/tsconfig.json",
     "test": "npm run build && node --test tests/*.test.mjs",
-    "start": "npm run build && node --env-file=.env dist/server/src/main.js",
-    "start:legacy": "npm run build && node server.mjs",
+    "start": "npm run build:server && node --env-file=.env dist/server/src/main.js",
     "dev:client": "vite client",
     "build:client": "tsc -p client/tsconfig.json && vite build client",
-    "build:legacy-client": "npm run build && node server/build-client.mjs",
-    "db:migrate": "npm run build && node --env-file=.env dist/server/src/database/migrate.js"
+    "db:migrate": "npm run build:server && node --env-file=.env dist/server/src/database/migrate.js",
+    "build:server": "tsc"
   },
   "devDependencies": {
     "@types/connect-pg-simple": "^7.0.3",

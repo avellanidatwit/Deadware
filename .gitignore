@@ -1,8 +1,11 @@
+# Dependencies and compiled output are disposable; never commit them.
 node_modules/
 dist/
 *.tsbuildinfo
 
-data/
+# Local simulation databases and PostgreSQL verification clusters are disposable.
+/data/
+# Static deployment output is rebuilt by the Pages workflow.
 web-dist/
 .env
 .env.*

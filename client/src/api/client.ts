@@ -7,7 +7,8 @@ export async function request<T>(path: string, method = 'GET', body?: object, si
     body: method !== 'GET' ? JSON.stringify(body ?? {}) : undefined,
     signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(10000)]) : AbortSignal.timeout(10000),
   });
-  const data = await response.json();
+  const text = await response.text();
+  const data = text.trim() ? JSON.parse(text) as { error?: string; errors?: { line?: number; message: string }[] } : {};
   if (!response.ok) throw new ApiError(data.error ?? data.errors?.map((e: { line?: number; message: string }) => `${e.line ? `Line ${e.line}: ` : ''}${e.message}`).join('\n') ?? 'Request failed.', response.status);
   return data as T;
 }

@@ -1,87 +1,108 @@
 # Deadware
 
-An authoritative zombie simulation with SurvivorScript behavior, a React/Vite console, and self-hosted PostgreSQL. The browser sends validated requests and sees only permitted snapshots; all game logic runs on the server.
+A multiplayer zombie simulation where you write scripts to control survivors. The server runs the world and saves progress to PostgreSQL. Players sign in through a React website.
+
+**Hosting:** GitHub Pages runs the website. One separate server runs Node.js and PostgreSQL.
+
+## First-time setup
+
+Install **Node.js 24+** and **PostgreSQL 17**, then open a terminal in this project folder. Make sure the PostgreSQL service is running.
+
+### 1. Create the database
+
+For a **new database only**, run:
+
+```sh
+psql -h 127.0.0.1 -U postgres -d postgres -f server/database/setup.sql
+```
+
+The script creates the database and prompts for two passwords:
+
+- `deadware_app`: used by the game.
+- `deadware_migrator`: used to update the database structure.
+
+On Windows, if `psql` is not found, open PostgreSQL's **SQL Shell**, connect to the `postgres` database, and run this with your project path:
+
+```text
+\i 'C:/path/to/Deadware/server/database/setup.sql'
+```
+
+Already have a Deadware database? Skip this step and keep your existing passwords.
+
+### 2. Configure the game
+
+```sh
+npm install
+```
+
+Copy `.env.example` to `.env`. Set these values:
+
+| Setting | What to enter |
+| --- | --- |
+| `DATABASE_PASSWORD` | The `deadware_app` password |
+| `MIGRATION_PASSWORD` | The `deadware_migrator` password |
+| `SESSION_SECRET` | A random value from the command below |
+
+```sh
+node -e "console.log(require('node:crypto').randomBytes(32).toString('hex'))"
+```
+
+Leave the other settings at their defaults for local development. Keep `.env` private.
+
+### 3. Prepare the database
+
+```sh
+npm run db:migrate
+```
+
+Run this again after updates that change the database structure.
 
 ## Run locally
 
-Requires Node.js 24+ and Docker Compose (or a local PostgreSQL 17 installation).
+Start the game server:
 
-1. Run `npm install` (PowerShell can use `npm.cmd`).
-2. Copy `.env.example` to `.env`. Set different random passwords for `DATABASE_PASSWORD`, `MIGRATION_PASSWORD`, and `POSTGRES_PASSWORD`. Set `SESSION_SECRET` to at least 32 random characters. Generate each value with `node -e "console.log(require('node:crypto').randomBytes(32).toString('hex'))"`.
-3. Run `docker compose up -d --wait database`.
-4. Run `npm run db:migrate`.
-5. Run `npm start`, then `npm run dev:client` in another terminal.
-6. Open **http://localhost:5173**, register, and inject a survivor with living and future zombie programs.
+```sh
+npm start
+```
 
-The API binds to `127.0.0.1:3000`; PostgreSQL binds to `127.0.0.1:5432`. There is no default PostgreSQL player/password. Compose initialization runs only for a new volume. Editing `.env` does not rotate existing database role passwords.
+In a second terminal, start the website:
 
-The migration account owns the schema; the application account has data access without schema privileges. For an existing PostgreSQL installation, provision roles using [init.sh](server/database/init.sh) before migrations. Keep PostgreSQL local/private and never run the application as its superuser.
+```sh
+npm run dev:client
+```
 
-## Repository structure
+Open **http://localhost:5173**, register an account, and create a survivor. Keep both terminals open while playing. If PowerShell blocks `npm`, use `npm.cmd` instead.
 
-| Path | Responsibility |
+The world runs while the server is running, even without connected players. Progress is saved automatically; a crash can lose progress since the last checkpoint (30 seconds by default).
+
+## Host with GitHub Pages
+
+GitHub Pages hosts only the website. Your game server must stay online separately.
+
+1. Set up Node.js and PostgreSQL on your server using the steps above. Run one game server process and configure it to restart automatically.
+2. Put Caddy or Nginx in front of the API to provide **HTTPS**, forwarding requests to `127.0.0.1:3000`. Keep PostgreSQL private, listening on localhost with password authentication.
+3. In the server's `.env`, set `NODE_ENV=production` and `CLIENT_ORIGIN` to your website's HTTPS origin, such as `https://play.example.com` (no path or trailing slash).
+4. In your GitHub repository, open **Settings > Pages** and choose **GitHub Actions** as the source.
+5. Under **Settings > Secrets and variables > Actions > Variables**, add `VITE_API_URL` with your public API origin, such as `https://api.example.com` (no trailing slash).
+6. Push to `main` or manually run the **Deploy web client** workflow. Test registration and login on the published website.
+
+For a Pages address such as `https://name.github.io/Deadware/`, `CLIENT_ORIGIN` is `https://name.github.io`.
+
+**Login cookies:** With a Pages custom domain and API subdomain under the same site, keep `COOKIE_SAME_SITE=lax`. With unrelated website/API domains, set it to `none`; browsers that block third-party cookies may prevent login.
+
+## Useful commands
+
+| Command | Purpose |
 | --- | --- |
-| `client/src/main.tsx` | React login, survivor dashboard, editor and world viewer |
-| `client/src/api/` | Credentialed HTTP requests |
-| `client/src/ui/` | Preserved renderer and legacy UI modules |
-| `shared/src/types/` | Public API/world types independent of server models |
-| `server/src/api/` | Authentication, sessions, validation and ownership |
-| `server/src/database/` | PostgreSQL connection, migrations and repositories |
-| `server/src/simulation/` | Serialized tick/mutation/checkpoint coordination |
-| `server/src/world.mjs` | Existing world manager and versioned save codec |
-| `server/src/world/`, `entities/`, `data/` | Preserved simulation systems |
-| `server/src/scripting/` | Existing parser, runtime and language modules |
+| `npm test` | Build and run tests |
+| `npm run build:client` | Build the website into `web-dist/` |
+| `npm run db:migrate` | Apply database updates |
 
-Dependencies and the lockfile are managed at the repository root. The existing world manager remains JavaScript; simulation modules and the new API/database layers are TypeScript.
+Database integration tests require `TEST_DATABASE_URL` pointing to a disposable test database. Otherwise they are skipped locally; GitHub Actions runs them.
 
-## Persistence
+## Data and existing installations
 
-Users, sessions, survivors and versioned survivor/zombie script pairs have relational tables. A complete versioned world checkpoint preserves zombies, terrain, loot, inventory, memory, the library and pending injections. Survivor rows and script history commit atomically with that checkpoint; separate tables for the remaining objects are deferred.
+- Back up PostgreSQL before upgrades. Never use its administrator account to run the game.
+- Do not commit `.env`, database files, or generated folders such as `node_modules/`, `dist/`, and `web-dist/`.
 
-The active world lives in RAM. Configure `SIMULATION_TICK_MS=100`, `DECISION_TICKS=6`, `CLIENT_POLL_MS=1000` and `CHECKPOINT_MS=30000` independently. Survivor movement retains its two-decision cooldown. World tick/decision timing persists and cannot silently change on restart. Database delays pause ticks rather than accumulating a backlog.
-
-Accepted mutations and graceful shutdown also checkpoint. Crashes may lose simulation progress since the last checkpoint; acknowledged mutations have committed. Persistence failure halts operations. An advisory lock prevents multiple server writers. Server downtime is not simulated. Back up PostgreSQL and verify restores in a separate database before upgrades.
-
-## API and security
-
-Passwords use Argon2id. PostgreSQL-backed sessions use HttpOnly cookies, 12-hour expiry, regeneration on login and invalidation on logout. Production cookies require HTTPS. Authentication work and request rates are bounded. SQL values are parameterized; scripts compile once on deployment/recovery and never execute JavaScript.
-
-Mutations require the exact `CLIENT_ORIGIN`, JSON and `X-Deadware-Client: web`. Credentialed CORS allows that origin. These server-side checks protect against cross-site form/fetch CSRF. Vite preserves the browser origin through its development proxy. Frontend configuration contains no secrets.
-
-| Method | Endpoint | Purpose |
-| --- | --- | --- |
-| POST | `/api/auth/register` | `{username, email, password}` |
-| POST | `/api/auth/login` | `{email, password}` |
-| POST | `/api/auth/logout` | Revoke session |
-| GET | `/api/me` | Current account |
-| GET | `/api/survivors`, `/api/me/entities` | Owned entities |
-| GET | `/api/programming` | Active entities, defaults, library, queue |
-| GET | `/api/world?entity=<id>` | Owned entity's perception/explored terrain |
-| POST | `/api/survivors` | Queue `{name, script, zombieScript?}`; server controls spawn/ownership |
-| PUT | `/api/survivors/:id/script` | Deploy `{script, zombieScript?}` after ownership checks |
-| PUT | `/api/zombies/:id/script` | Update an owned resurrected zombie's `{script}` |
-| GET / POST | `/api/scripts` | Read/save named script pairs |
-
-Survivors rise as owned zombies after death; direct zombie injection remains disabled. See [the game/language design](docs/DESIGN.md). WebSockets, password recovery, automatic SQLite import and richer React inspector views are deferred.
-
-## GitHub Pages
-
-The [Pages workflow](.github/workflows/deploy-client.yml) builds static React files into `web-dist/` and deploys on pushes to `main` or manual runs. In **Settings ? Pages**, select **GitHub Actions**. Set repository variable `VITE_API_URL` to your future public HTTPS API origin. `VITE_BASE_PATH` defaults to `./` for repository paths and custom domains.
-
-For manual builds, copy `client/.env.example` to `client/.env.local`, set the public API URL and run `npm run build:client`. The Node API and PostgreSQL require their own always-on host. These source changes do not provision a live site or server.
-
-Keep development local. For production, put Caddy/Nginx on the same host in front of `127.0.0.1:3000`, expose HTTPS only, set `NODE_ENV=production` and an exact HTTPS `CLIENT_ORIGIN`. Proxy trust is limited to loopback. Unrelated Pages/API domains need `COOKIE_SAME_SITE=none`; some browsers block third-party cookies. A Pages custom domain and API subdomain under the same site can use `lax`. Test authentication using the actual domains before launch.
-
-References: [Vite Pages deployment](https://vite.dev/guide/static-deploy), [Express sessions](https://expressjs.com/en/resources/middleware/session/), [PostgreSQL transactions in Node](https://node-postgres.com/features/transactions).
-
-## Existing SQLite worlds
-
-`npm run start:legacy` preserves the prior SQLite server, accounts and browser UI at http://localhost:3000, using the relocated simulation code. Existing `data/world.sqlite` is untouched. Its bearer sessions and environment variables are independent of PostgreSQL and the React console. `npm run build:legacy-client` builds the old static UI, replacing `web-dist/`.
-
-The [archived legacy reference](docs/LEGACY.md) describes that UI/API. Substitute `start:legacy` for `start`, and `build:legacy-client` for `build:client` in that document. Account IDs and password hashes differ; no automatic import is attempted.
-
-## Verification
-
-`npm test` builds both TypeScript targets and runs simulation, legacy UI/API, scheduling and configuration tests. `npm run build:client` verifies the static production build.
-
-The PostgreSQL integration test runs when `TEST_DATABASE_URL` points to a **disposable database** with schema-creation privileges. It creates and removes a unique schema, testing migrations, Argon2id authentication, cookies, CSRF, ownership, forbidden fields, script history, expiry and exact recovery. Without the variable, it is explicitly skipped. GitHub Actions supplies PostgreSQL and always runs it.
+See [the game and scripting guide](docs/DESIGN.md) for SurvivorScript and simulation details. Code lives in `client/` (website), `server/` (API and game), and `shared/` (shared types).

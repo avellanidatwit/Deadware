@@ -4,6 +4,8 @@ import type { Item, ItemType } from "./item.js";
 import { searchEntities, searchCells, hasLineOfSight, spatialDistance } from "../world/perception.js";
 import type { MemorySlot } from "../scripting/language/selectors.js";
 
+export interface SurvivorEvent { tick: number; message: string }
+
 export class Survivor implements GridEntity {
   public readonly symbol = "S";
 
@@ -15,12 +17,18 @@ export class Survivor implements GridEntity {
   public stamina = 100;
   public ammo = 0;
   public equippedItemId?: string;
+  public history: SurvivorEvent[] = [];
   /** Runtime navigation state is part of the persistent entity, not process-local caches. */
   public fleeHistory?: { from: { x: number; y: number }; to: { x: number; y: number }; direction: string; tick?: number };
   public patrolState?: { destination: string; returning: boolean };
   /** Position snapshots never track unseen entities. */
   readonly memory: Partial<Record<MemorySlot, { x: number; y: number }>> = {};
   get equippedItem(): Item | undefined { return this.inventory.find(item => item.id === this.equippedItemId); }
+
+  recordEvent(tick: number, message: string): void {
+    this.history.push({ tick, message });
+    if (this.history.length > 100) this.history.splice(0, this.history.length - 100);
+  }
 
   updateNeeds(): void {
     if (!this.isAlive()) return;

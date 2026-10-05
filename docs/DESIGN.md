@@ -6,7 +6,7 @@ This is the living reference for the implemented simulation and SurvivorScript. 
 
 ## Game loop and world
 
-The server advances every 100 ms, independently of connected clients. Every sixth tick is an actor decision: survivors act first, then living zombies. Clients poll snapshots once per second. Refreshing a page does not reset state; restarting the server restores the SQLite save. No catch-up simulation runs during server downtime. Survivor movement is permitted every second update (displayed ticks 2, 4, 6, ...); zombies can move each update. Each action consumes one update, including an unsuccessful action. Death stops all actions and removes the entity from the grid.
+The server advances every 100 ms, independently of connected clients. Every sixth tick is an actor decision: survivors act first, then living zombies. Clients poll snapshots once per second. Refreshing a page does not reset state; restarting the server restores the PostgreSQL checkpoint. No catch-up simulation runs during server downtime. Survivor movement is permitted every second update (displayed ticks 2, 4, 6, ...); zombies can move each update. Each action consumes one update, including an unsuccessful action. Death stops all actions and removes the entity from the grid.
 
 The generated city contains roads, buildings, doors, furniture, containers, cars and zombies. Distances use Manhattan distance, with inclusive boundaries. Walls and closed doors block sight; diagonal corner gaps do not grant sight. Closed doors and solid furniture block movement. Survivors see up to eight tiles; larger script ranges cannot extend this. The map remembers explored terrain. Survivor navigation uses revealed terrain, while EXPLORE visits revealed, unvisited interior floor tiles first, then seeks unexplored boundaries. The map uses dark unexplored tiles, gray remembered terrain, bright visible terrain, and red outlines along the current vision boundary. Entities and floor loot remain hidden outside current sight. An unreachable selected target makes that action fail; selection does not switch to another target automatically.
 
@@ -45,7 +45,7 @@ General target syntax is `[selector] type [range]`, for example `nearest contain
 
 Types: `zombie`, `survivor`, `container`, any item category, `door`, `building`, `car`, and the memory slots `home`, `target`, `lastZombie`, `lastContainer`. Item targets refer to floor piles; building targets refer to visible wall/floor cells. Memory targets use saved coordinates, even outside current sight, without revealing new world information.
 
-Legacy commands and action objects are preserved by the public facade; explicit selector commands compile to `{ type: "targeted", verb, target: { type, selector, range? } }`. New target behavior belongs in `targetResolver.ts`, not the parser or browser.
+Existing commands and action objects are preserved by the public facade; explicit selector commands compile to `{ type: "targeted", verb, target: { type, selector, range? } }`. New target behavior belongs in `targetResolver.ts`, not the parser or browser.
 
 ### Actions
 
@@ -53,7 +53,7 @@ Legacy commands and action objects are preserved by the public facade; explicit 
 | --- | --- |
 | `MOVE north/south/east/west` | One cardinal step |
 | `MOVE_TO [selector] type [range]` | One step toward the selected target; stop adjacent to actors, doors, storage or blocked terrain, on top of floor piles or remembered walkable locations |
-| `MOVE_TO container [range]` | Legacy alias, default range 10 (still capped at sight range 8) |
+| `MOVE_TO container [range]` | Short alias, default range 10 (still capped at sight range 8) |
 | `MOVE_AWAY [selector] zombie [range]` | Safest walkable neighboring tile by distance from that zombie; retains direction on ties to avoid oscillation |
 | `EXPLORE`, `WANDER` | Visit revealed interior floor tiles not yet walked on, then seek an unexplored boundary |
 | `FOLLOW [selector] survivor [range]` | Approach a visible survivor and stop adjacent; does not track them through walls |
@@ -154,51 +154,43 @@ Memory accounting: each atomic condition costs one, counts cost two, each ordina
 
 Stages are cumulative: basic behavior; interaction; Boolean logic; targeting/counts; memory/following. These are scenario configuration hooks. The current sandbox has no reward economy or automatic capability unlocks. Designing unlock objectives and survivor/device capacity upgrades remains future gameplay work.
 
-## UI and architecture
+## Application structure
 
-The client starts with email/password login and opens a view-only screen. A grouped dropdown selects owned survivors or zombies. A separate Programming tab creates survivors, deploys behavior to active entities and saves named script pairs. Stats show health, position, hunger, thirst, stamina and loaded ammunition. Inventory and floor panels show items. The in-page command reference gives the core syntax; this document is the full specification.
+The React client provides registration, email/password login, survivor selection, script editing, a saved-program library, a Canvas map and survivor decision history. It polls the API for updates. Sessions use HttpOnly cookies and survive page refreshes until expiry or logout.
 
-`src/scripting/survivorScript.ts` is the stable public entry point. `language/` owns types, selectors, capability metadata and shared traversal/classification. `parser/` handles rules, conditions, actions and targets. `runtime/` owns context, condition evaluation, target resolution, rule selection, action execution and complete survivor ticks. `main.ts` handles login/logout, selected-entity snapshots and workspace tabs; `ui/programming.ts` handles survivor drafts, deployment and the saved program library. `server/world.mjs` owns simulation and compiled programs; `server.mjs` owns HTTP, authentication, persistence and scheduling. Entity classes own inventory and needs state. World perception remains the source of LOS and spatial queries.
+- `client/`: website and API requests.
+- `server/src/api/`: authentication, validation and ownership checks.
+- `server/src/scripting/`: language definitions, parser and interpreter.
+- `server/src/world.mjs`: world state, compiled programs and snapshots.
+- `server/src/simulation/`: tick and save coordination.
+- `server/src/database/`: PostgreSQL access and migrations.
+- `server/src/data/`: item definitions and the default survivor program.
+- `shared/`: public types shared with the client.
 
-Pages and styles live in `public/`. Run `npm test` to verify script validation, perception, sustained scavenging, combat, snapshot rendering, remote client requests, ownership checks, injection and restart persistence. The suite intentionally omits exhaustive feature edge cases.
+The website can run on GitHub Pages. The Node API and PostgreSQL run on one separate host. See [the README](../README.md) for setup and commands.
 
-## Roadmap and boundaries
+## Server and persistence
 
-Implemented: modular language, formal syntax, selectors, items, needs, counts, item/building/car sensing, distance comparisons, Boolean logic, built-in memory, following and patrol, optional capacity/progression configuration, and reusable simulation execution.
+The server creates a world when no save exists. PostgreSQL stores accounts, sessions, survivors, script versions and a complete world checkpoint. The checkpoint preserves inventories, exploration, memory and queued spawns. Accepted changes are saved before success is returned. A failed save stops further operations, and a database lock prevents two servers from advancing the same world.
 
-Deferred as proposed: arbitrary variables, user functions, loops, bleeding/infection systems, group communication and shared destinations, and progression rewards. Following works with the server survivor collection. The server supports provisioned owners, persistent worlds, injection and deployed script persistence. Self-service accounts, historical statistics, progression rewards, regional subscriptions and WebSocket deltas remain future work.
+Passwords use Argon2id. Sessions expire after 12 hours. The API validates request origins, input and ownership; clients cannot choose owner IDs, positions, health or inventory. The runtime database role cannot change the schema. Scripts run through the game's interpreter and never execute JavaScript.
 
-
-## Server specification
-
-The server generates the world only when no save exists. A versioned snapshot graph preserves class identity, shared entity references, Sets, inventories and exploration. SQLite commits the world after every actor decision and accepted request. Accounts store normalized email addresses and salted scrypt password hashes. Login issues a hashed, revocable session token with a 12-hour lifetime. Credentials are provisioned by the operator, and ownership derives exclusively from authentication. Legacy API tokens remain supported. All mutations reject unrecognized fields and enforce entity ownership. Clients cannot set positions, health, inventory or owner IDs. A persistence failure halts further simulation and requests. One process owns each database; deployment requires persistent disk.
-
-Only survivor creation enters the durable queue, limited to 100 entries. Each decision attempts one spawn chosen uniformly from free walkable tiles. An owner may have at most 100 survivors and queued definitions; zombies raised from them do not consume another survivor slot. Dead entities remain available for inspection and count toward this prototype quota. Deployment validates the entire script before replacing the compiled program and incrementing its version. Parsing errors retain source line numbers. No arbitrary code is evaluated.
-
-REST provides world snapshots, owned entity lists/details, profile identity, script deployment and injection; see README for routes. World/region currently returns the same bounded full-grid snapshot as world. Terrain is hidden until explored, and entities/loot require current sight. Scripts continue using perception and memory through the existing server runtime, never client-provided knowledge. The snapshot contract can later support push delivery without moving authority into the client.
-
-## Web client specification
-
-The client runs as static files, including on GitHub Pages under a repository path. The entry screen has email/password login with optional server connection settings. A successful login opens a view-only screen with a dropdown grouped into owned survivors and zombies, the grid, selected-entity status, and a color/symbol key. Empty accounts show a clear empty state. No script editor or creation controls appear in the viewer.
-
-The server validates ownership of every requested observer ID. Survivor views retain explored terrain; zombie views use current line of sight within detection range without remembered terrain. Nearby actors of any owner remain visible when in the selected entity's sight. The browser never calculates perception. Switching selection cancels the old request and ignores stale responses.
-
-Passwords are cleared after login. Session tokens remain in page memory; logout revokes the server session, expiration returns to login, and refresh requires logging in again. The browser polls once per second and retries connection failures. Authentication failures do not expose the viewer. Self-service registration, password recovery, statistics and historical logs remain deferred.
+Only survivor creation enters the durable queue, limited to 100 entries. Each decision attempts one spawn on a free walkable tile. An owner may have at most 100 survivors and queued definitions, including dead survivors. Resurrected zombies do not consume another survivor slot.
 
 ## Programming and resurrection
 
-The Programming tab contains a create-survivor option and active owned survivors/zombies. New survivors have a living program and a prepared zombie program. Both are validated before injection or deployment. Active survivors can update both programs; active zombies raised from survivors can update their current program. Dead entities cannot be deployed to. Direct zombie injection is rejected at both world-manager and API boundaries.
+New survivors have a living program and a prepared zombie program. Both are validated before creation or deployment. Active survivors can update both; owned zombies can update their current program. Dead entities cannot receive updates. Direct zombie creation is disabled.
 
-A decision runs survivor actions and existing zombie actions, then raises dead survivors at their exact final coordinates. The new zombie retains ownership and gets the prepared script. It first acts on the next decision. Persistent origin and descendant IDs make this transition idempotent after recovery, including deaths from combat and needs. No health or inventory is carried into the zombie beyond its normal defaults.
+After survivor and zombie actions, dead survivors rise at their final coordinates with the same owner and prepared zombie program. They first act on the next decision. Stored origin and descendant IDs prevent duplicate resurrection after recovery.
 
-Named script pairs are stored independently of entities in the server save. Users can preview them, save new versions as separate entries, and load a pair into a new survivor draft. Death automatically archives the last deployed living and zombie programs, so losing a survivor never loses those programs. Manual saves are limited to 100 pairs per owner, plus one death archive per survivor.
+Named script pairs can be saved and loaded into the editor. Death archives the last deployed living and zombie programs. Manual saves are limited to 100 pairs per owner, plus one death archive per survivor.
 
-New persistent worlds start without survivors or zombies. The migration removes known prototype fixture IDs and queued direct zombie injections from older saves while retaining player-created survivors. Legacy survivors receive the default zombie program if none was stored. The Programming tab offers a manual refresh of active entities and archives, and refreshes when entered without overwriting local drafts.
+## Visibility
 
-## Status presentation and public inspection
+The server checks ownership of the selected observer. Survivors remember explored terrain; zombies see only their current surroundings. Other actors and loose items appear only within current sight. Public actor data excludes scripts, inventory, needs, memory and login email.
 
-The selected owned entity has a status card with identity, public owner display name, state badge, position, kills and lifetime. Health, stamina, hunger and thirst use labeled native progress bars; hunger and thirst are explicitly marked as better when lower. Inventory uses five category-marked slots and distinguishes the equipped item. These private stats and inventory are only in the selected owner's observer payload.
+The current client draws the map and shows the selected entity's health, message and survivor decision history. Richer inspection panels are not implemented.
 
-Visible grid occupants carry an explicit public projection: ID, name, kind, owner display name, health/max health, kills and alive seconds. It never includes scripts, inventory, needs, ammunition, memory or login email. The inspector uses this projection only while the tile is currently visible. Previously explored terrain can be described without disclosing occupants; unexplored terrain stays unknown. Snapshot refreshes clear occupants lost from sight even when the pointer is stationary. Selection changes and logout reset inspection.
+## Future work
 
-The grid supports mouse hover, touch selection and keyboard arrow navigation. Coordinates account for the rendered canvas size and border. Multiple actors sharing a tile get separate public cards. Kill credit is assigned only for fatal combat hits; needs deaths do not award kills. Birth/death simulation ticks persist per actor; zombie age begins at resurrection. Legacy saves with no birth record display unknown age rather than inventing one. Public account display names are provisioned through optional DEADWARE_USERS displayName, falling back to owner IDs.
+Password recovery, richer inspection, progression rewards and push updates are deferred. The scripting language does not support arbitrary variables, user functions or loops.

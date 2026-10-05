@@ -15,7 +15,7 @@ export function findNearestSurvivor(zombie: Zombie, survivors: Survivor[], grid:
   return findNearestTarget(grid, zombie, survivors, { range, predicate: survivor => survivor.isAlive() });
 }
 
-export function runZombieTick(zombie: Zombie, program: SurvivorProgram, grid: Grid, survivors: Survivor[], zombies: Zombie[]): void {
+export function runZombieTick(zombie: Zombie, program: SurvivorProgram, grid: Grid, survivors: Survivor[], zombies: Zombie[], tick?: number): void {
   if (!zombie.isAlive()) return;
   const action = runSurvivorProgram(program, {
     grid, survivor: zombie, survivors, zombies, detectionRange: zombie.detectionRange,
@@ -25,6 +25,7 @@ export function runZombieTick(zombie: Zombie, program: SurvivorProgram, grid: Gr
     const target = findNearestSurvivor(zombie, survivors, grid, 1);
     if (target) {
       target.takeDamage(20);
+      target.recordEvent(tick ?? 0, "Attacked by a zombie for 20 damage.");
       if (!target.isAlive()) { zombie.kills++; grid.removeEntity(target.id); }
     }
     return;
