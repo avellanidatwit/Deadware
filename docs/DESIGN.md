@@ -12,147 +12,92 @@ The generated city contains roads, buildings, doors, furniture, containers, cars
 
 ## SurvivorScript language
 
-Scripts are case-sensitive. `WHEN` introduces a condition, followed by exactly one action line. `OTHERWISE` is unconditional and should come last. Blank lines and lines starting with `#` are ignored; indentation is optional. Invalid syntax reports the original source line. Empty programs wait. No loops, functions, parentheses, arbitrary variables, or multi-action blocks are supported: the simulation tick is the loop.
+Scripts are case-sensitive priority lists. Each `WHEN condition` or `OTHERWISE` has exactly one action on the next line. The first eligible matching rule wins. `NOT` binds before `AND`, then `OR`; evaluation short-circuits. There are no parentheses, loops, functions, or arbitrary variables. Blank lines and `#` comments are ignored.
 
-Every decision tick, rules are evaluated top to bottom. The first matching rule selects its action. Movement rules are skipped when stamina is below two, so a later matching interaction can execute. There is no alternating movement cooldown. If nothing can be selected, the survivor waits. Target availability is checked during execution; a missing target consumes the selected action rather than silently changing priorities.
+### Conditions and targets
 
-Boolean precedence is `NOT`, then `AND`, then `OR`, with short-circuit evaluation. For more complex expressions use multiple rules. Zombie CHASE derives its range from positive survivorNearby conditions in the first true OR branch, taking the minimum within an AND expression; NOT does not supply a chase range.
+- Numeric comparisons: `health < 40`, `hunger >= 80`, `thirst >= 80`, `stamina < 20`, `ammo == 0`.
+- Inventory: `hasItem food`, `equipped weapon`, `itemCount water < 2`, `inventorySpace`, `inventoryFull`, `itemsOnFloor`.
+- Perception: `count zombie 5 >= 3`, `count food 5 >= 2`, `distance nearest zombie < 5`, `visible nearest food`.
+- State: `remembered target`, `mode == fleeing`, `mode != scavenging`.
 
-### Conditions
+Numeric operators are `<`, `>`, `<=`, `>=`, `==`, `!=`; operands and ranges are nonnegative safe integers. Targets use `[selector] type [range]`. Selectors are nearest (default), farthest, weakest and strongest. Health selectors require actors. Categories include zombie, survivor, container, car, door, building, food, water, bandage, weapon, gun, ammo and armor. Guns also match weapon.
 
-| Syntax | Meaning |
-| --- | --- |
-| `health < 50` | Own health; also available to zombies |
-| `hunger > 70`, `thirst > 70`, `stamina < 20`, `ammo < 5` | Survivor needs or loaded rounds |
-| `hungry`, `thirsty`, `tired` | Hunger > 70, thirst > 70, stamina < 20 |
-| `inventoryFull`, `inventorySpace` | Five slots used, or at least one free |
-| `hasItem food`, `equipped weapon` | Inventory category or equipped category |
-| `zombieNearby [range]`, `survivorNearby [range]` | Visible living actors, excluding self; default 5 (zombies use their detectionRange for survivors) |
-| `containerNearby [range]` | Visible nonempty storage; default 1 |
-| `nearbydoor`, `doorNearby` | Closed door exactly one cardinal tile away |
-| `itemsOnFloor` | Any items on the current tile |
-| `itemNearby food [range]` | Visible floor items of that category; default 8; no inspection of hidden container loot |
-| `buildingNearby [range]`, `carNearby [range]` | Visible building wall/floor or car trunk; default 8 |
-| `zombieCount 5 >= 3`, `survivorCount 10 >= 2` | Count visible living actors within the specified range |
-| `distance nearest zombie < 3` | Compare distance to the selected visible target or remembered location; false if absent |
-| `remembered target` | Whether a built-in memory slot exists |
-
-All comparisons accept `<`, `>`, `<=`, `>=`, `==`, `!=` and nonnegative safe integers. Ranges must be nonnegative safe integers; zero means the same tile. Item categories are `food`, `weapon`, `bandage`, `water`, `gun`, `ammo`.
-
-### Targets and selectors
-
-General target syntax is `[selector] type [range]`, for example `nearest container 6`. Omitting the selector means `nearest`; general queries default to the survivor's sight range. `farthest` reverses distance ordering. `weakest` and `strongest` rank living actors by health, breaking ties by distance. Other ties preserve stable query order. Health selectors are rejected for nonliving targets.
-
-Types: `zombie`, `survivor`, `container`, any item category, `door`, `building`, `car`, and the memory slots `home`, `target`, `lastZombie`, `lastContainer`. Item targets refer to floor piles; building targets refer to visible wall/floor cells. Memory targets use saved coordinates, even outside current sight, without revealing new world information.
-
-Existing commands and action objects are preserved by the public facade; explicit selector commands compile to `{ type: "targeted", verb, target: { type, selector, range? } }`. New target behavior belongs in `targetResolver.ts`, not the parser or browser.
+The shared target resolver applies sight, range, walls and living status. Actors exclude themselves. Explicit ranges cannot extend sight. Count returns actor/object counts or matching floor/building tile counts, not the number of individual items in a floor pile. ItemCount counts possessed items, including equipment once. Ammo item counts mean pouches; the ammo stat means loaded rounds. Missing targets make every distance comparison false. Visible accepts sensed categories, never memory slots.
 
 ### Actions
 
-| Syntax | Behavior |
+All target actions compile to `{ type: "targeted", verb, target }`, regardless of selector or omitted nearest keyword. Target behavior belongs in the shared resolver, not new condition types.
+
+| Action | Meaning |
 | --- | --- |
-| `MOVE north/south/east/west` | One cardinal step |
-| `MOVE_TO [selector] type [range]` | One step toward the selected target; stop adjacent to actors, doors, storage or blocked terrain, on top of floor piles or remembered walkable locations |
-| `MOVE_TO container [range]` | Short alias, default range 10 (still capped at sight range 8) |
-| `MOVE_AWAY [selector] zombie [range]` | Safest walkable neighboring tile by distance from that zombie; retains direction on ties to avoid oscillation |
-| `EXPLORE`, `WANDER` | Visit revealed interior floor tiles not yet walked on, then seek an unexplored boundary |
-| `FOLLOW [selector] survivor [range]` | Approach a visible survivor and stop adjacent; does not track them through walls |
-| `RETURN home` | Navigate to a remembered location |
-| `PATROL target` | Repeatedly travel between home and a remembered location; both endpoints must be walkable and reachable |
-| `OPEN [selector] door` | Open a closed door one cardinal tile away |
-| `SEARCH [selector] container` | Empty adjacent storage onto the survivor's current floor tile |
-| `SEARCH food` | Approach a visible floor pile of that type, or explore if none is visible; consumes movement, does not pick up |
-| `PICK_UP items`, `PICK_UP food` | Collect all or matching items underfoot until inventory is full |
-| `DROP food`, `DROP weapon` | Drop one item of that category underfoot; any item category is accepted |
-| `LOOK floor [item category]` | Inspect the current floor pile |
-| `EAT food` | Consume food, reducing hunger by 40 |
-| `USE bandage`, `USE water` | Consume to heal 30 (up to maxHealth), or reduce thirst by 50 |
-| `EQUIP weapon`, `EQUIP gun` | Equip one carried item; the item still occupies a slot |
-| `ATTACK [selector] zombie` | 25 damage unarmed, 40 with an equipped melee weapon, within one tile |
-| `SHOOT [selector] zombie [range]` | 40 damage, requires equipped gun and a loaded round; sight constrained |
-| `RELOAD` | Consume one ammo pack to fill the six-round magazine; requires equipped gun; does nothing if already full |
-| `WAIT` | Remain in place and recover stamina |
+| `FIND food` | Approach visible matching loot; otherwise explore. Newly visible loot interrupts exploration on the next decision. Never collects or opens storage. |
+| `MOVE_TO nearest food` | Approach the selected resolvable target; no exploration fallback. |
+| `SEARCH container`, `SEARCH car` | Empty nearby storage onto the actor's floor tile; no movement or pickup. |
+| `PICK_UP food`, `PICK_UP items` | Collect eligible loot underfoot, within inventory and weapon limits. |
+| `MOVE_AWAY nearest zombie`, `FOLLOW survivor` | Flee or follow a selected actor. |
+| `ATTACK weakest zombie`, `SHOOT zombie` | Melee within one tile, or shoot with an equipped loaded gun. |
+| `OPEN door` | Open a selected adjacent closed door. |
+| `DROP weapon`, `EQUIP weapon`, `EQUIP armor` | Drop or equip possessed items. |
+| `EAT food`, `USE water`, `USE bandage`, `RELOAD` | Consume supplies. Reload uses one pouch to fill an equipped gun with magazine space. |
+| `LOOK floor`, `LOOK floor food` | Inspect loot underfoot. |
+| `MOVE east`, `EXPLORE`, `WAIT` | Travel directionally, explore, or stop. |
+| `REMEMBER nearest container AS target`, `SET home = position` | Save coordinates in home, target, lastZombie or lastContainer. |
+| `RETURN home`, `PATROL target` | Navigate to remembered coordinates or patrol between home and a remembered point. |
+| `SET_MODE fleeing` | Switch to a declared mode, consuming the decision and cancelling movement. |
 
-Interaction and melee selectors resolve among targets within reach (one tile); a farther weak enemy does not prevent an adjacent attack. Combat targets must be alive. Dead enemies are removed immediately. Dropping a gun discards its loaded rounds. Survivors can carry only one weapon total (a gun or melee weapon), with separate equipped weapon and armor slots. On recovery, extra weapons are returned to the floor, preserving the equipped weapon when possible. Searching a container does not equip or pick up anything automatically.
+A missing target or unavailable selected action consumes the decision. Existing eligibility exceptions remain: impossible pickups and movement with insufficient stamina skip before condition evaluation. FIND explicitly explores when no target is visible. SPRINT can prefix a movement action. See the continuous movement section below for speeds and stamina.
 
-### Needs and memory
+Home starts at spawn. LastZombie and lastContainer refresh from visible targets at decisions and retain their last coordinates after sight is lost. Memory never tracks unseen movement. Saved coordinates persist across script replacement and server restarts.
 
-Needs update once at the start of each living survivor tick: hunger +0.15 and thirst +0.25, capped at 100. A survivor loses one health per tick if either is at 100. Successful movement costs two stamina; a stationary action recovers three, capped at 100. Exhaustion blocks movement selection, not interactions. This tuning keeps needs gradual while giving food, water and rest competing priorities.
+### Mode lifecycle
 
-`home` initially holds the spawn position. `lastZombie` and `lastContainer` update to the nearest visible target at decision time and retain their last observed coordinates when sight is lost. Memory belongs to each survivor and survives script replacement, but resets with the simulation.
+Declare up to 16 unique modes before rules, using lowercase names matching `[a-z][a-z0-9_]{0,31}`. Undeclared references, duplicates, invalid names and late declarations are rejected. The first declaration is the default. With no declarations the actor has no mode, and mode references are invalid.
+
+Deploying a script resets the entity to its new default even when names overlap; deploying a modeless script clears the mode. A restart preserves the current valid mode. A dead survivor's final mode remains inactive saved state. The new zombie starts independently in its zombie script's default mode, or no mode. Mode switching consumes one decision; the next decision evaluates the new mode.
 
 ```text
-WHEN NOT remembered target AND containerNearby 8
-    REMEMBER nearest container AS target
+MODE scavenging
+MODE fleeing
 
-WHEN health < 30
-    RETURN home
+WHEN mode != fleeing AND visible nearest zombie
+    SET_MODE fleeing
 
-OTHERWISE
-    MOVE_TO target
-```
+WHEN mode == fleeing AND count zombie 8 == 0
+    SET_MODE scavenging
 
-`SET home = position`, `SET target = nearest container`, and `REMEMBER nearest container AS target` each consume one action. All four slots accept position snapshots. No live entity references are retained. An unconditional SET rule would run repeatedly and starve later rules, so guard initialization with a condition.
-
-### Example autonomous survivor
-
-```text
-WHEN health < 30 AND hasItem bandage
-    USE bandage
-
-WHEN zombieNearby 1
-    ATTACK nearest zombie
-
-WHEN zombieCount 5 >= 3 OR health < 30 AND zombieNearby 5
+WHEN mode == fleeing
     MOVE_AWAY nearest zombie
-
-WHEN thirsty AND hasItem water
-    USE water
-
-WHEN hungry AND hasItem food
-    EAT food
-
-WHEN hasItem weapon AND NOT equipped weapon
-    EQUIP weapon
 
 WHEN itemsOnFloor AND inventorySpace
     PICK_UP items
 
-WHEN containerNearby AND inventorySpace
-    SEARCH nearest container
-
-WHEN inventoryFull
-    MOVE_TO home
-
-WHEN doorNearby
-    OPEN door
-
-WHEN containerNearby 8
-    MOVE_TO nearest container
-
 OTHERWISE
-    EXPLORE
+    FIND food
 ```
 
-## Zombies
+### Zombies
 
-The same parser and condition evaluator serve zombie programs. Zombies retain health, nearby actor sensing, Boolean expressions, MOVE, CHASE survivor, ATTACK survivor, WANDER, EXPLORE and WAIT. Survivor item, memory, needs, selectors, door and storage commands are rejected recursively, including inside NOT/OR. Zombies attack for 20 damage within one tile. Default scripts attack, chase, then wander. Their detectionRange defaults to five and explicit nearby ranges can extend it. Survivor-specific progression restrictions do not affect existing zombie programs unless explicitly supplied when compiling.
+Zombies use the same AST, generic count/distance/visible queries, health comparisons, Boolean logic and modes. They can MOVE, MOVE_TO, MOVE_AWAY, FOLLOW, ATTACK, EXPLORE, WAIT and SET_MODE. Their target actions and queries accept actors; attacks must target survivors. Inventory, environmental interactions, needs, sprint and coordinate memory remain survivor-only. Detection range defaults to five and cannot be extended by a query. Default behavior attacks within reach, approaches visible survivors, otherwise explores.
 
-## Program capacity and progression
+### Program budgets
 
-The server leaves capabilities unlocked, but enforces 1�100 rules, five condition leaves per rule, one action per rule, 16 KiB of source, and 512 characters per line. Four predefined memory slots bound stored memories. Programs compile at deployment and recovery, never per tick. Scenarios can opt into restrictions before installing a program:
+The server permits 1-100 rules, 250 condition AST nodes total, 16 KiB of source and 512 characters per line. Each leaf, AND, OR, NOT and OTHERWISE counts as one node. There is no per-rule leaf limit. This bounds condition evaluation and target query counts without restricting a rule to five tests. Four memory slots and 16 bounded mode names limit persistent script state.
+
+The parser also supports scenario options `maxRules`, `maxConditionNodes`, `memoryBudget` and `unlockedCapabilities`. Memory cost is a separate optional scenario score; condition nodes are the evaluation budget. Programs compile before deployment, not per tick.
+
+### Optional server decision traces
+
+Pass a `DecisionTrace` as the third argument to `runSurvivorProgram` for selection details, or the fourth argument to `decideActor` for selection plus execution results:
 
 ```ts
-parseSurvivorScript(source, "survivor", {
-  maxRules: 8,
-  memoryBudget: 20,
-  unlockedCapabilities: progressionStages[2],
-});
+const trace: DecisionTrace = { rules: [] };
+const result = decideActor(program, context, simulationTime, trace);
 ```
 
-Memory accounting: each atomic condition costs one, counts cost two, each ordinary action costs one, an explicit targeted action costs two, and a memory action costs three. OTHERWISE counts as one condition; Boolean nodes have no additional cost. Limits are optional nonnegative integers. Compilation rejects over-budget or locked programs without replacing an installed program.
+The trace contains the mode before/after, one-based selected rule, selected action, tested rules, actual condition values and results, skipped eligibility reasons, and execution failure text where available. Boolean children skipped by short-circuiting and rules after the selected rule are absent, not falsely reported as failed. An unavailable distance is null. Movement traces report selected intent, not a guarantee of arrival; navigation continues between decisions.
 
-Stages are cumulative: basic behavior; interaction; Boolean logic; targeting/counts; memory/following. These are scenario configuration hooks. The current sandbox has no reward economy or automatic capability unlocks. Designing unlock objectives and survivor/device capacity upgrades remains future gameplay work.
+Tracing uses the same evaluator and resolver, with no extra perception or hidden branches. It is opt-in, per-call, and is not persisted or exposed in public snapshots. There is no new debugging UI. A reused trace is cleared on each decision.
 
 ## Application structure
 
@@ -216,7 +161,7 @@ Scripts select persistent movement intents, interrupted by a different movement 
 Prefix a survivor movement command with `SPRINT`, for example:
 
 ```text
-WHEN zombieNearby 6 AND stamina > 20
+WHEN count zombie 6 > 0 AND stamina > 20
     SPRINT MOVE_AWAY nearest zombie
 
 OTHERWISE

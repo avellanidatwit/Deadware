@@ -8,11 +8,25 @@
     "test": "npm run build && node --test tests/*.test.mjs",
     "start": "npm run build:server && node --env-file=.env dist/server/src/main.js",
     "dev:client": "vite client",
+    "check:pages": "node scripts/check-pages-build.mjs",
+    "preview:client": "vite preview client",
     "build:client": "tsc -p client/tsconfig.json && vite build client",
-    "db:migrate": "npm run build:server && node --env-file=.env dist/server/src/database/migrate.js",
-    "build:server": "tsc"
+    "db:migrate": "npm run build:server && node --env-file=.env --env-file-if-exists=.env.migrations dist/server/src/database/migrate.js",
+    "build:server": "tsc",
+    "world:reset": "npm run build:server && node --env-file=.env dist/server/src/database/resetWorld.js",
+    "test:browser": "playwright test",
+    "service:build": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/windows/Build-ServiceHost.ps1",
+    "service:install": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/windows/Install-Service.ps1",
+    "service:remove": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/windows/Remove-Service.ps1",
+    "start:server": "node --env-file=.env dist/server/src/main.js",
+    "check:server": "npm run build:server && node --env-file-if-exists=.env dist/server/src/doctor.js",
+    "check:deployment": "node --env-file-if-exists=.env scripts/check-deployment.mjs",
+    "test:integration": "npm run build:server && node scripts/test-postgres.mjs",
+    "format": "prettier --write \"{client/src,server/src,shared/src,scripts,tests}/**/*.{ts,tsx,mjs,css}\" \"client/config/*.mjs\" \"*.json\" \"*.ts\" \"client/*.ts\" \".github/workflows/*.yml\"",
+    "format:check": "prettier --check \"{client/src,server/src,shared/src,scripts,tests}/**/*.{ts,tsx,mjs,css}\" \"client/config/*.mjs\" \"*.json\" \"*.ts\" \"client/*.ts\" \".github/workflows/*.yml\""
   },
   "devDependencies": {
+    "@playwright/test": "^1.64.0",
     "@types/connect-pg-simple": "^7.0.3",
     "@types/express": "^5.0.6",
     "@types/express-session": "^1.19.0",
@@ -20,6 +34,7 @@
     "@types/pg": "^8.23.1",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
+    "prettier": "^3.9.10",
     "typescript": "^5.0.0",
     "vite": "^8.3.1"
   },
@@ -27,6 +42,9 @@
     "node": ">=24.0.0"
   },
   "dependencies": {
+    "@dnd-kit/core": "^6.3.1",
+    "@dnd-kit/sortable": "^10.0.0",
+    "@dnd-kit/utilities": "^3.2.2",
     "argon2": "^0.45.1",
     "connect-pg-simple": "^10.0.0",
     "express": "^5.2.1",

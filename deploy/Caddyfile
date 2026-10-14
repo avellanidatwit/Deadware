@@ -1,0 +1,8 @@
+# Set DEADWARE_API_HOST to a real DNS hostname (no https://), then validate/run Caddy.
+# Node and PostgreSQL stay private. Publish only TCP 80/443 to this host.
+{$DEADWARE_API_HOST} {
+    @notApi not path /api/*
+    respond @notApi 404
+    header -Server
+    reverse_proxy 127.0.0.1:{$DEADWARE_API_PORT:3000}
+}

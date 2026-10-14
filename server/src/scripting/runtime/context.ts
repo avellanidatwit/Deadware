@@ -1,6 +1,7 @@
-import type { Grid } from "../../world/grid.js";
-import type { Survivor } from "../../entities/survivor.js";
-import type { Zombie } from "../../entities/zombie.js";
+import type { CombatResult } from '../../../../shared/src/types/visualEvents.js';
+import type { Grid } from '../../world/grid.js';
+import type { Survivor } from '../../entities/survivor.js';
+import type { Zombie } from '../../entities/zombie.js';
 export interface ScriptContext {
   grid: Grid;
   survivor: Survivor | Zombie;
@@ -11,4 +12,5 @@ export interface ScriptContext {
   canMove?: boolean;
   tick?: number;
   realtime?: boolean;
+  onCombat?: (result: CombatResult) => void;
 }

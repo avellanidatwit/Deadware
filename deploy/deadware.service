@@ -1,0 +1,22 @@
+[Unit]
+Description=Deadware authoritative game server
+After=network-online.target postgresql.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=deadware
+Group=deadware
+WorkingDirectory=/opt/deadware
+ExecStart=/usr/bin/node --env-file=/opt/deadware/.env /opt/deadware/dist/server/src/main.js
+Restart=on-failure
+RestartSec=5
+KillSignal=SIGTERM
+TimeoutStopSec=30
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+
+[Install]
+WantedBy=multi-user.target

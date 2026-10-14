@@ -1,12 +1,6 @@
-import type { Item } from "../entities/item.js";
+import type { Item } from '../entities/item.js';
 
-export type TileType =
-  | "empty"
-  | "road"
-  | "buildingWall"
-  | "buildingFloor"
-  | "door"
-  | "openDoor";
+export type TileType = 'empty' | 'road' | 'buildingWall' | 'buildingFloor' | 'door' | 'openDoor';
 
 export interface GridEntity {
   id: string;
@@ -43,7 +37,7 @@ export class Grid {
         row.push({
           x,
           y,
-          tileType: "empty",
+          tileType: 'empty',
           entities: [],
           items: [],
         });
@@ -65,9 +59,12 @@ export class Grid {
   // Check whether coordinates are inside the map
   isValidPosition(x: number, y: number): boolean {
     return (
-      Number.isFinite(x) && Number.isFinite(y) &&
-      x >= -0.49 && x < this.width - 0.5 &&
-      y >= -0.49 && y < this.height - 0.5
+      Number.isFinite(x) &&
+      Number.isFinite(y) &&
+      x >= -0.49 &&
+      x < this.width - 0.5 &&
+      y >= -0.49 &&
+      y < this.height - 0.5
     );
   }
 
@@ -79,7 +76,11 @@ export class Grid {
       return false;
     }
 
-    return cell.tileType !== "buildingWall" && cell.tileType !== "door" && !cell.entities.some(entity => entity.blocksMovement);
+    return (
+      cell.tileType !== 'buildingWall' &&
+      cell.tileType !== 'door' &&
+      !cell.entities.some((entity) => entity.blocksMovement)
+    );
   }
 
   // Add an entity to the grid
@@ -87,17 +88,13 @@ export class Grid {
     const cell = this.getCell(entity.x, entity.y);
 
     if (!cell) {
-      console.error(
-        `Cannot add ${entity.id}: position is outside the grid.`
-      );
+      console.error(`Cannot add ${entity.id}: position is outside the grid.`);
 
       return false;
     }
 
     if (!this.isWalkable(entity.x, entity.y)) {
-      console.error(
-        `Cannot add ${entity.id}: position is blocked.`
-      );
+      console.error(`Cannot add ${entity.id}: position is blocked.`);
 
       return false;
     }
@@ -111,9 +108,7 @@ export class Grid {
   removeEntity(entityId: string): boolean {
     for (const row of this.cells) {
       for (const cell of row) {
-        const index = cell.entities.findIndex(
-          (entity) => entity.id === entityId
-        );
+        const index = cell.entities.findIndex((entity) => entity.id === entityId);
 
         if (index !== -1) {
           cell.entities.splice(index, 1);
@@ -126,11 +121,7 @@ export class Grid {
   }
 
   // Move an entity to another tile
-  moveEntity(
-    entity: GridEntity,
-    newX: number,
-    newY: number
-  ): boolean {
+  moveEntity(entity: GridEntity, newX: number, newY: number): boolean {
     if (!this.isWalkable(newX, newY)) {
       return false;
     }
@@ -143,7 +134,7 @@ export class Grid {
     }
 
     const entityIndex = oldCell.entities.findIndex(
-      (currentEntity) => currentEntity.id === entity.id
+      (currentEntity) => currentEntity.id === entity.id,
     );
 
     if (entityIndex === -1) {
@@ -161,75 +152,44 @@ export class Grid {
   }
 
   // Create a simple rectangular building
-  createBuilding(
-    startX: number,
-    startY: number,
-    width: number,
-    height: number
-  ): boolean {
+  createBuilding(startX: number, startY: number, width: number, height: number): boolean {
     // Buildings need enough space for walls and an interior
     if (width < 3 || height < 3) {
-      console.error(
-        "Buildings must be at least 3x3."
-      );
+      console.error('Buildings must be at least 3x3.');
 
       return false;
     }
 
     // Make sure the building fits inside the map
-    if (
-      startX < 0 ||
-      startY < 0 ||
-      startX + width > this.width ||
-      startY + height > this.height
-    ) {
-      console.error(
-        "Building does not fit inside the grid."
-      );
+    if (startX < 0 || startY < 0 || startX + width > this.width || startY + height > this.height) {
+      console.error('Building does not fit inside the grid.');
 
       return false;
     }
 
-    for (
-      let y = startY;
-      y < startY + height;
-      y++
-    ) {
-      for (
-        let x = startX;
-        x < startX + width;
-        x++
-      ) {
+    for (let y = startY; y < startY + height; y++) {
+      for (let x = startX; x < startX + width; x++) {
         const cell = this.cells[y][x];
 
         const isTop = y === startY;
-        const isBottom =
-          y === startY + height - 1;
+        const isBottom = y === startY + height - 1;
         const isLeft = x === startX;
-        const isRight =
-          x === startX + width - 1;
+        const isRight = x === startX + width - 1;
 
-        if (
-          isTop ||
-          isBottom ||
-          isLeft ||
-          isRight
-        ) {
-          cell.tileType = "buildingWall";
+        if (isTop || isBottom || isLeft || isRight) {
+          cell.tileType = 'buildingWall';
         } else {
-          cell.tileType = "buildingFloor";
+          cell.tileType = 'buildingFloor';
         }
       }
     }
 
     // Add a door to the middle of the bottom wall
-    const doorX =
-      startX + Math.floor(width / 2);
+    const doorX = startX + Math.floor(width / 2);
 
-    const doorY =
-      startY + height - 1;
+    const doorY = startY + height - 1;
 
-    this.cells[doorY][doorX].tileType = "door";
+    this.cells[doorY][doorX].tileType = 'door';
 
     return true;
   }
@@ -237,7 +197,7 @@ export class Grid {
   // Print the map to the console
   print(): void {
     for (let y = 0; y < this.height; y++) {
-      let line = "";
+      let line = '';
 
       for (let x = 0; x < this.width; x++) {
         const cell = this.cells[y][x];
@@ -249,24 +209,24 @@ export class Grid {
         }
 
         switch (cell.tileType) {
-          case "empty":
-          case "road":
-            line += ".";
+          case 'empty':
+          case 'road':
+            line += '.';
             break;
 
-          case "buildingWall":
-            line += "#";
+          case 'buildingWall':
+            line += '#';
             break;
 
-          case "buildingFloor":
-            line += " ";
+          case 'buildingFloor':
+            line += ' ';
             break;
 
-          case "door":
-            line += "D";
+          case 'door':
+            line += 'D';
             break;
-          case "openDoor":
-            line += "/";
+          case 'openDoor':
+            line += '/';
             break;
         }
       }

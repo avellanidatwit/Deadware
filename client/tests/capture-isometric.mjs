@@ -1,0 +1,24 @@
+import {chromium} from '@playwright/test';
+import {mkdir} from 'node:fs/promises';
+await mkdir('test-results',{recursive:true});
+const browser=await chromium.launch();
+const page=await browser.newPage({viewport:{width:1440,height:1000}});
+await page.goto('http://127.0.0.1:5173/tests/world.fixture.html');
+const world=await page.evaluate(()=>window.fixtureWorld);
+await page.route(url=>url.pathname.startsWith('/api/'),async route=>{
+ const path=new URL(route.request().url()).pathname;
+ const data=path==='/api/me'?{id:'owner',username:'Scout',email:'scout@example.test'}:path==='/api/world'?world:{entities:[{id:'human',kind:'survivor',name:'Mara',health:100,program:'OTHERWISE\n EXPLORE',version:1}],queue:[],scripts:[],behaviorScripts:[],defaults:{script:'OTHERWISE\n EXPLORE',zombieScript:'OTHERWISE\n WAIT'}};
+ await route.fulfill({json:data});
+});
+await page.goto('http://127.0.0.1:5173/#view');
+await page.getByRole('img',{name:'Isometric world'}).waitFor();
+await page.waitForTimeout(300);
+await page.screenshot({path:'test-results/isometric-desktop.png',fullPage:true});
+await page.getByLabel('Ambient lighting').selectOption('dusk');
+await page.getByLabel('Cosmetic weather').selectOption('rain');
+await page.waitForTimeout(100);
+await page.screenshot({path:'test-results/isometric-dusk.png',fullPage:true});
+await page.setViewportSize({width:390,height:844});
+await page.waitForTimeout(100);
+await page.screenshot({path:'test-results/isometric-mobile.png',fullPage:true});
+await browser.close();

@@ -5,30 +5,61 @@ import { World } from '../dist/server/src/world.mjs';
 import { configuration } from '../dist/server/src/config/environment.js';
 
 test('mutations commit in order and ticks cannot race a checkpoint', async () => {
-  const world = new World(); const events = [];
+  const world = new World();
+  const events = [];
   let release;
-  const blocked = new Promise(resolve => { release = resolve; });
-  const runtime = new Runtime(world, { async save() { events.push('saving'); await blocked; events.push('saved'); } });
-  const mutation = runtime.mutate(() => { events.push('mutation'); return 'accepted'; });
-  const tick = runtime.run(() => { events.push('tick'); world.advance(); });
-  await new Promise(resolve => setImmediate(resolve));
+  const blocked = new Promise((resolve) => {
+    release = resolve;
+  });
+  const runtime = new Runtime(world, {
+    async save() {
+      events.push('saving');
+      await blocked;
+      events.push('saved');
+    },
+  });
+  const mutation = runtime.mutate(() => {
+    events.push('mutation');
+    return 'accepted';
+  });
+  const tick = runtime.run(() => {
+    events.push('tick');
+    world.advance();
+  });
+  await new Promise((resolve) => setImmediate(resolve));
   assert.deepEqual(events, ['mutation', 'saving']);
-  release(); assert.equal(await mutation, 'accepted'); await tick;
+  release();
+  assert.equal(await mutation, 'accepted');
+  await tick;
   assert.deepEqual(events, ['mutation', 'saving', 'saved', 'tick']);
 });
 
 test('checkpoint failure rejects mutation and prevents later world operations', async () => {
-  const runtime = new Runtime(new World(), { async save() { throw new Error('private database details'); } });
-  await assert.rejects(runtime.mutate(() => 'accepted'), /Persistence failed/);
+  const runtime = new Runtime(new World(), {
+    async save() {
+      throw new Error('private database details');
+    },
+  });
+  await assert.rejects(
+    runtime.mutate(() => 'accepted'),
+    /Persistence failed/,
+  );
   assert.equal(runtime.failed, true);
-  await assert.rejects(runtime.run(() => assert.fail('must not run')), /unavailable/);
+  await assert.rejects(
+    runtime.run(() => assert.fail('must not run')),
+    /unavailable/,
+  );
 });
 
 test('timing config preserves default behavior and respects a different decision interval', () => {
-  const world = new World(); world.state.timing = { tickMs: 200, decisionTicks: 3 };
+  const world = new World();
+  world.state.timing = { tickMs: 200, decisionTicks: 3 };
   world.inject('owner', 'survivor', 'Scout', 'OTHERWISE\n WAIT');
-  world.advance(); world.advance(); assert.equal(world.state.survivors.length, 0);
-  world.advance(); assert.equal(world.state.survivors.length, 1);
+  world.advance();
+  world.advance();
+  assert.equal(world.state.survivors.length, 0);
+  world.advance();
+  assert.equal(world.state.survivors.length, 1);
   for (let i = 0; i < 5; i++) world.advance();
   assert.equal(world.snapshot('owner').observer.aliveSeconds, 1);
 });
@@ -38,5 +69,28 @@ test('configuration rejects insecure cross-site cookies and invalid timing', () 
   assert.equal(configuration(env).CHECKPOINT_MS, 30000);
   assert.throws(() => configuration({ ...env, COOKIE_SAME_SITE: 'none' }), /HTTPS/);
   assert.throws(() => configuration({ ...env, SIMULATION_TICK_MS: '0' }));
-  assert.throws(() => configuration({ ...env, CLIENT_ORIGIN: 'https://example.com/path' }), /exact origin/);
+  assert.throws(
+    () => configuration({ ...env, CLIENT_ORIGIN: 'https://example.com/path' }),
+    /exact origin/,
+  );
+});
+
+test('production rejects placeholder secrets, ephemeral ports and non-HTTP origins', () => {
+  const env = {
+    NODE_ENV: 'production',
+    DATABASE_PASSWORD: 'test',
+    CLIENT_ORIGIN: 'https://play.example.com',
+    SESSION_SECRET: '9f7b2d4a6c8e103529af76b8d0e4c631',
+  };
+  assert.equal(configuration(env).PORT, 3000);
+  assert.throws(() => configuration({ ...env, SESSION_SECRET: 'x'.repeat(32) }), /random/);
+  assert.throws(
+    () => configuration({ ...env, SESSION_SECRET: 'replace-me-with-your-secret-value-now' }),
+    /random/,
+  );
+  assert.throws(() => configuration({ ...env, PORT: '0' }), /fixed/);
+  assert.throws(
+    () => configuration({ ...env, CLIENT_ORIGIN: 'ftp://play.example.com' }),
+    /exact origin/,
+  );
 });

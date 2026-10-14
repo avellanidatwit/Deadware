@@ -1,5 +1,10 @@
-import type { SurvivorAction } from "./types.js";
+import type { SurvivorAction } from './types.js';
 export function isMovement(action: SurvivorAction): boolean {
-  return action.type === "sprint" || ["move", "moveAway", "moveToContainer", "explore", "wander", "chase"].includes(action.type) ||
-    (action.type === "targeted" && (["MOVE_TO", "MOVE_AWAY", "FOLLOW", "RETURN", "PATROL"].includes(action.verb) || action.verb === "SEARCH" && action.target.type !== "container"));
+  return (
+    action.type === 'sprint' ||
+    action.type === 'move' ||
+    action.type === 'explore' ||
+    (action.type === 'targeted' &&
+      ['MOVE_TO', 'MOVE_AWAY', 'FOLLOW', 'RETURN', 'PATROL', 'FIND'].includes(action.verb))
+  );
 }

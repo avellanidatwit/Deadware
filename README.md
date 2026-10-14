@@ -1,119 +1,59 @@
-# Deadware
+﻿# Deadware
 
-A multiplayer zombie simulation where you write scripts to control survivors. The server runs the world and saves progress to PostgreSQL. Players sign in through a React website.
+A multiplayer zombie simulation where you write SurvivorScript to control survivors. The React client shows the world; the Node.js server runs the simulation and saves progress in PostgreSQL.
 
-**Hosting:** GitHub Pages runs the website. One separate server runs Node.js and PostgreSQL.
+GitHub Pages hosts the client. The API needs a separate HTTPS server. Public hosting has not been provisioned yet; follow [the deployment guide](docs/DEPLOYMENT.md) when choosing a host and domain.
 
-## First-time setup
+## First-time local setup
 
-Install **Node.js 24+** and **PostgreSQL 17**, then open a terminal in this project folder. Make sure the PostgreSQL service is running.
-
-### 1. Create the database
-
-For a **new database only**, run the command for your terminal.
-
-**Windows PowerShell** (default PostgreSQL 17 installation):
+Install Node.js 24+ and PostgreSQL 17. For a new database, run:
 
 ```powershell
 & "C:\Program Files\PostgreSQL\17\bin\psql.exe" -h 127.0.0.1 -U postgres -d postgres -f server/database/setup.sql
 ```
 
-**Other terminals**, with `psql` on PATH:
+On other systems, use `psql` on PATH. The setup prompts for separate runtime (`deadware_app`) and migration (`deadware_migrator`) passwords. Skip this step for an existing database.
 
-```sh
-psql -h 127.0.0.1 -U postgres -d postgres -f server/database/setup.sql
-```
-
-The script creates the database and prompts for two passwords:
-
-- `deadware_app`: used by the game.
-- `deadware_migrator`: used to update the database structure.
-
-Enter the `postgres` administrator password chosen during installation first. Then choose the two game database passwords when prompted. Password input is hidden.
-
-Already have a Deadware database? Skip this step and keep your existing passwords.
-
-### 2. Configure the game
-
-```sh
-npm install
-```
-
-Copy `.env.example` to `.env`. Set these values:
-
-| Setting | What to enter |
-| --- | --- |
-| `DATABASE_PASSWORD` | The `deadware_app` password |
-| `MIGRATION_PASSWORD` | The `deadware_migrator` password |
-| `SESSION_SECRET` | A random value from the command below |
+Run `npm install`, copy `.env.example` to `.env`, and enter the two database passwords. Generate `SESSION_SECRET` with:
 
 ```sh
 node -e "console.log(require('node:crypto').randomBytes(32).toString('hex'))"
 ```
 
-Leave the other settings at their defaults for local development. Keep `.env` private.
-
-### 3. Prepare the database
+Keep `.env` private. Then run:
 
 ```sh
 npm run db:migrate
-```
-
-Run this again after updates that change the database structure.
-
-## Run locally
-
-Start the game server:
-
-```sh
+npm run check:server
 npm start
 ```
 
-In a second terminal, start the website:
+In another terminal, run `npm run dev:client` and open http://localhost:5173. Register and create a survivor. On Windows, use `npm.cmd` if PowerShell blocks `npm`.
 
-```sh
-npm run dev:client
-```
-
-Open **http://localhost:5173**, register an account, and create a survivor. Keep both terminals open while playing. If PowerShell blocks `npm`, use `npm.cmd` instead.
-
-The world runs while the server is running, even without connected players. Progress is saved automatically; a crash can lose progress since the last checkpoint (30 seconds by default).
-
-## Host with GitHub Pages
-
-GitHub Pages hosts only the website. Your game server must stay online separately.
-
-1. Set up Node.js and PostgreSQL on your server using the steps above. Run one game server process and configure it to restart automatically.
-2. Put Caddy or Nginx in front of the API to provide **HTTPS**, forwarding requests to `127.0.0.1:3000`. Keep PostgreSQL private, listening on localhost with password authentication.
-3. In the server's `.env`, set `NODE_ENV=production` and `CLIENT_ORIGIN` to your website's HTTPS origin, such as `https://play.example.com` (no path or trailing slash).
-4. In your GitHub repository, open **Settings > Pages** and choose **GitHub Actions** as the source.
-5. Under **Settings > Secrets and variables > Actions > Variables**, add `VITE_API_URL` with your public API origin, such as `https://api.example.com` (no trailing slash).
-6. Push to `main` or manually run the **Deploy web client** workflow. Test registration and login on the published website.
-
-For a Pages address such as `https://name.github.io/Deadware/`, `CLIENT_ORIGIN` is `https://name.github.io`.
-
-**Login cookies:** With a Pages custom domain and API subdomain under the same site, keep `COOKIE_SAME_SITE=lax`. With unrelated website/API domains, set it to `none`; browsers that block third-party cookies may prevent login.
+The world continues while the API is running. Clean shutdown saves progress; a crash can lose changes since the last checkpoint (30 seconds by default). Stop the Windows service before starting manually.
 
 ## Useful commands
 
 | Command | Purpose |
 | --- | --- |
-| `npm test` | Build and run tests |
+| `npm start` | Build and start the API manually |
+| `npm run start:server` | Start an already-built API |
 | `npm run build:client` | Build the website into `web-dist/` |
-| `npm run db:migrate` | Apply database updates |
+| `npm run db:migrate` | Apply database migrations |
+| `npm run check:server -- --production` | Check deployment configuration and database readiness |
+| `npm run check:deployment -- --api URL --client URL` | Check public HTTPS endpoints, CORS and authentication |
+| `npm test` | Type checks and automated tests |
+| `npm run test:integration` | Run real database tests in an isolated temporary cluster |
+| `npm run test:browser` | Browser regressions; install Chromium once with `npx playwright install chromium` |
+| `npm run format` | Format source code consistently |
+| `npm run format:check` | Check formatting |
 
-Database integration tests require `TEST_DATABASE_URL` pointing to a disposable test database. Otherwise they are skipped locally; GitHub Actions runs them.
+GitHub Actions runs checks before publishing Pages. Set the repository's public `VITE_API_URL` variable only after the HTTPS API is available. See [deployment, cookies, proxy, services and backups](docs/DEPLOYMENT.md) and [Windows automatic startup with manual startup retained](docs/WINDOWS_SERVICE.md).
 
-## Data and existing installations
+## Game and code
 
-- Back up PostgreSQL before upgrades. Never use its administrator account to run the game.
-- Do not commit `.env`, database files, or generated folders such as `node_modules/`, `dist/`, and `web-dist/`.
+The World view supports dragging, zooming, inspection, camera following, roofs and permission-filtered attack/death effects. Keyboard controls: arrows inspect, +/- zoom, 0 resets, Escape clears selection. Movement is continuous between script decisions; sprint temporarily increases survivor speed.
 
-See [the game and scripting guide](docs/DESIGN.md) for SurvivorScript and simulation details. Code lives in `client/` (website), `server/` (API and game), and `shared/` (shared types).
+See [game and scripting rules](docs/DESIGN.md) and [renderer architecture and assets](docs/ISOMETRIC_RENDERER.md). Source lives in `client/`, `server/` and `shared/`.
 
-
-## Real-time movement
-
-Movement runs continuously between script decisions. Survivors walk at 1.0 tiles/second; zombies move at 1.2. Use `SPRINT MOVE_AWAY nearest zombie` for a temporary survivor speed of 1.6 (three seconds, stamina cost, eight-second cooldown). Existing scripts still work.
-
-After updating, run `npm run db:migrate`, restart the API and refresh the website. Back up PostgreSQL first: this update stores decimal positions and health. See [the movement rules](docs/DESIGN.md#continuous-movement) for details.
+To generate a fresh world, stop the API and run `npm run world:reset`, then restart. This deletes gameplay data, including programs and death archives, while retaining accounts. Back up PostgreSQL first. The reset refuses to run while a server owns the world lock.

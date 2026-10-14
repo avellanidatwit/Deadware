@@ -1,15 +1,19 @@
-import type { SurvivorAction, Direction } from "../language/types.js";
-import type { ScriptContext } from "./context.js";
-import { Survivor } from "../../entities/survivor.js";
-import { Zombie } from "../../entities/zombie.js";
-import { ItemContainer } from "../../entities/container.js";
-import { spatialDistance, type Position } from "../../world/perception.js";
-import { resolveTargets } from "./targetResolver.js";
-import { isMovement } from "../language/actions.js";
-import type { Target } from "../language/selectors.js";
+import { executeZombieAction } from '../zombieScript.js';
+import type { SurvivorAction, Direction } from '../language/types.js';
+import type { ScriptContext } from './context.js';
+import { Survivor } from '../../entities/survivor.js';
+import { Zombie } from '../../entities/zombie.js';
+import { ItemContainer } from '../../entities/container.js';
+import { spatialDistance, type Position } from '../../world/perception.js';
+import { resolveTargets } from './targetResolver.js';
+import { isMovement } from '../language/actions.js';
+import type { Target } from '../language/selectors.js';
 
 export const offsets: Record<Direction, Position> = {
-  north: { x: 0, y: -1 }, south: { x: 0, y: 1 }, east: { x: 1, y: 0 }, west: { x: -1, y: 0 },
+  north: { x: 0, y: -1 },
+  south: { x: 0, y: 1 },
+  east: { x: 1, y: 0 },
+  west: { x: -1, y: 0 },
 };
 
 /** Pathfinding is limited to terrain this survivor has revealed. */
@@ -25,8 +29,13 @@ function approach(context: ScriptContext, target: Position, adjacent: boolean): 
       return current.first ? grid.moveEntity(survivor, current.first.x, current.first.y) : false;
     }
     for (const delta of Object.values(offsets)) {
-      const next = { x: current.x + delta.x, y: current.y + delta.y }, key = `${next.x},${next.y}`;
-      if (!seen.has(key) && survivor.hasExplored(next.x, next.y) && grid.isWalkable(next.x, next.y)) {
+      const next = { x: current.x + delta.x, y: current.y + delta.y },
+        key = `${next.x},${next.y}`;
+      if (
+        !seen.has(key) &&
+        survivor.hasExplored(next.x, next.y) &&
+        grid.isWalkable(next.x, next.y)
+      ) {
         seen.add(key);
         queue.push({ ...next, first: current.first ?? next });
       }
@@ -38,17 +47,24 @@ function approach(context: ScriptContext, target: Position, adjacent: boolean): 
 function flee(context: ScriptContext, target: Position): boolean {
   const { grid, survivor } = context;
   if (!(survivor instanceof Survivor)) return false;
-  const moves = (Object.entries(offsets) as [Direction, Position][]).map(([direction, delta]) =>
-    ({ x: survivor.x + delta.x, y: survivor.y + delta.y, direction })).filter(move => grid.isWalkable(move.x, move.y));
+  const moves = (Object.entries(offsets) as [Direction, Position][])
+    .map(([direction, delta]) => ({ x: survivor.x + delta.x, y: survivor.y + delta.y, direction }))
+    .filter((move) => grid.isWalkable(move.x, move.y));
   if (!moves.length) return false;
-  const safest = Math.max(...moves.map(move => spatialDistance(move, target)));
-  let candidates = moves.filter(move => spatialDistance(move, target) === safest);
+  const safest = Math.max(...moves.map((move) => spatialDistance(move, target)));
+  let candidates = moves.filter((move) => spatialDistance(move, target) === safest);
   const previous = survivor.fleeHistory;
-  if (previous && previous.to.x === survivor.x && previous.to.y === survivor.y &&
-      (context.tick === undefined || previous.tick === context.tick - 2)) {
-    const forward = candidates.filter(move => move.x !== previous.from.x || move.y !== previous.from.y);
+  if (
+    previous &&
+    previous.to.x === survivor.x &&
+    previous.to.y === survivor.y &&
+    (context.tick === undefined || previous.tick === context.tick - 2)
+  ) {
+    const forward = candidates.filter(
+      (move) => move.x !== previous.from.x || move.y !== previous.from.y,
+    );
     if (forward.length) candidates = forward;
-    const continuing = candidates.find(move => move.direction === previous.direction);
+    const continuing = candidates.find((move) => move.direction === previous.direction);
     if (continuing) candidates = [continuing];
   }
   const best = candidates[Math.floor(Math.random() * candidates.length)];
@@ -61,40 +77,68 @@ function flee(context: ScriptContext, target: Position): boolean {
 function targeted(verb: string, target: Target, context: ScriptContext): boolean {
   const { grid, survivor } = context;
   if (!(survivor instanceof Survivor)) return false;
-  const range = verb === "ATTACK" || verb === "OPEN" || verb === "SEARCH" ? Math.min(target.range ?? 1, 1) : target.range;
+  const range =
+    verb === 'ATTACK' || verb === 'OPEN' || verb === 'SEARCH'
+      ? Math.min(target.range ?? 1, 1)
+      : target.range;
   const resolved = resolveTargets({ ...target, range }, context)[0];
   if (!resolved) return false;
-  if (verb === "MOVE_AWAY") return flee(context, resolved);
-  if (verb === "PATROL") {
+  if (verb === 'MOVE_AWAY') return flee(context, resolved);
+  if (verb === 'PATROL') {
     const home = survivor.memory.home;
     if (!home) return false;
     const destination = `${resolved.x},${resolved.y}`;
     let state = survivor.patrolState;
-    if (!state || state.destination !== destination) { state = { destination, returning: false }; survivor.patrolState = state; }
+    if (!state || state.destination !== destination) {
+      state = { destination, returning: false };
+      survivor.patrolState = state;
+    }
     let goal = state.returning ? home : resolved;
-    if (spatialDistance(survivor, goal) === 0) { state.returning = !state.returning; goal = state.returning ? home : resolved; }
+    if (spatialDistance(survivor, goal) === 0) {
+      state.returning = !state.returning;
+      goal = state.returning ? home : resolved;
+    }
     return approach(context, goal, false);
   }
-  if (["MOVE_TO", "FOLLOW", "RETURN", "PATROL"].includes(verb)) {
-    return approach(context, resolved, ["zombie", "survivor", "container", "car", "door"].includes(target.type) || !grid.isWalkable(resolved.x, resolved.y));
+  if (['MOVE_TO', 'FOLLOW', 'RETURN', 'PATROL'].includes(verb)) {
+    return approach(
+      context,
+      resolved,
+      ['zombie', 'survivor', 'container', 'car', 'door'].includes(target.type) ||
+        !grid.isWalkable(resolved.x, resolved.y),
+    );
   }
-  if (verb === "OPEN") {
+  if (verb === 'OPEN') {
     const cell = grid.getCell(resolved.x, resolved.y);
-    if (!cell || spatialDistance(survivor, resolved) > 1.05 || cell.tileType !== "door") return false;
-    cell.tileType = "openDoor";
+    if (!cell || spatialDistance(survivor, resolved) > 1.05 || cell.tileType !== 'door')
+      return false;
+    cell.tileType = 'openDoor';
     return true;
   }
-  if (verb === "SEARCH") {
+  if (verb === 'SEARCH') {
     if (resolved instanceof ItemContainer) return survivor.searchContainer(grid, resolved) !== null;
     return false;
   }
-  if ((verb === "ATTACK" || verb === "SHOOT") && resolved instanceof Zombie) {
-    if (verb === "SHOOT") {
-      if (survivor.equippedItem?.type !== "gun" || survivor.ammo <= 0) return false;
+  if ((verb === 'ATTACK' || verb === 'SHOOT') && resolved instanceof Zombie) {
+    if (verb === 'SHOOT') {
+      if (survivor.equippedItem?.type !== 'gun' || survivor.ammo <= 0) return false;
       survivor.ammo--;
     }
-    resolved.takeDamage(verb === "SHOOT" ? survivor.combatStats.damage : survivor.combatStats.meleeDamage);
-    if (!resolved.isAlive()) { survivor.kills++; grid.removeEntity(resolved.id); }
+    const beforeHealth = resolved.health;
+    resolved.takeDamage(
+      verb === 'SHOOT' ? survivor.combatStats.damage : survivor.combatStats.meleeDamage,
+    );
+    context.onCombat?.({
+      attacker: survivor,
+      target: resolved,
+      damage: beforeHealth - resolved.health,
+      weapon: verb === 'SHOOT' ? 'gun' : 'melee',
+      killed: !resolved.isAlive(),
+    });
+    if (!resolved.isAlive()) {
+      survivor.kills++;
+      grid.removeEntity(resolved.id);
+    }
     return true;
   }
   return false;
@@ -103,51 +147,74 @@ function targeted(verb: string, target: Target, context: ScriptContext): boolean
 /** Execute one selected action. A failed action still consumes the tick. */
 export function executeSurvivorAction(action: SurvivorAction, context: ScriptContext): string {
   const { grid, survivor } = context;
-  if (!(survivor instanceof Survivor) || !survivor.isAlive()) return "Survivor cannot act.";
+  if (!survivor.isAlive()) return 'Actor cannot act.';
+  if (action.type === 'setMode') {
+    survivor.mode = action.mode;
+    survivor.motion = undefined;
+    return `Mode: ${action.mode}.`;
+  }
+  if (survivor instanceof Zombie) return executeZombieAction(action, context);
   const moving = isMovement(action);
-  if (moving && (context.canMove === false || survivor.stamina < 2)) return "Survivor rests before moving.";
+  if (moving && (context.canMove === false || survivor.stamina < 2))
+    return 'Survivor rests before moving.';
   const before = { x: survivor.x, y: survivor.y };
   let success = false;
   switch (action.type) {
-    case "move": {
+    case 'move': {
       const delta = offsets[action.direction];
-      success = grid.moveEntity(survivor, survivor.x + delta.x, survivor.y + delta.y); break;
+      success = grid.moveEntity(survivor, survivor.x + delta.x, survivor.y + delta.y);
+      break;
     }
-    case "explore": case "wander": success = survivor.explore(grid); break;
-    case "moveAway": success = targeted("MOVE_AWAY", { type: "zombie", selector: "nearest" }, context); break;
-    case "moveToContainer": success = targeted("MOVE_TO", { type: "container", selector: "nearest", range: action.range }, context); break;
-    case "attack": success = targeted("ATTACK", { type: "zombie", selector: "nearest" }, context); break;
-    case "openDoor": success = survivor.openDoor(grid); break;
-    case "pickUpItems": success = survivor.pickUpItems(grid).length > 0; break;
-    case "searchContainer": success = targeted("SEARCH", { type: "container", selector: "nearest" }, context); break;
-    case "lookFloor":
+    case 'explore':
+      success = survivor.explore(grid);
+      break;
+    case 'pickUpItems':
+      success = survivor.pickUpItems(grid).length > 0;
+      break;
+    case 'lookFloor':
       if (!context.realtime) survivor.stamina = Math.min(100, survivor.stamina + 3);
-      return survivor.lookAtFloor(grid, action.itemType).map(item => item.name).join(", ") || "No matching floor items.";
-    case "item":
-      if (action.verb === "PICK_UP") success = survivor.pickUpItems(grid, action.itemType).length > 0;
-      else if (action.verb === "DROP") success = survivor.dropItem(grid, action.itemType);
-      else if (action.verb === "EQUIP") success = survivor.equip(action.itemType);
+      return (
+        survivor
+          .lookAtFloor(grid, action.itemType)
+          .map((item) => item.name)
+          .join(', ') || 'No matching floor items.'
+      );
+    case 'item':
+      if (action.verb === 'PICK_UP')
+        success = survivor.pickUpItems(grid, action.itemType).length > 0;
+      else if (action.verb === 'DROP') success = survivor.dropItem(grid, action.itemType);
+      else if (action.verb === 'EQUIP') success = survivor.equip(action.itemType);
       else success = survivor.useItem(action.itemType);
       break;
-    case "reload": success = survivor.useItem("ammo"); break;
-    case "remember": {
-      const position = action.target === "position" ? survivor : resolveTargets(action.target, context)[0];
-      if (position) { survivor.memory[action.slot] = { x: position.x, y: position.y }; success = true; }
+    case 'reload':
+      success = survivor.useItem('ammo');
+      break;
+    case 'remember': {
+      const position =
+        action.target === 'position' ? survivor : resolveTargets(action.target, context)[0];
+      if (position) {
+        survivor.memory[action.slot] = { x: position.x, y: position.y };
+        success = true;
+      }
       break;
     }
-    case "targeted":
-      if (action.verb === "SEARCH" && action.target.type !== "container") {
+    case 'targeted':
+      if (action.verb === 'FIND') {
         // Search for an item means approach a visible floor pile, never inspect hidden loot.
         if (context.canMove === false || survivor.stamina < 2) break;
         const found = resolveTargets(action.target, context)[0];
         success = found ? approach(context, found, false) : survivor.explore(grid);
       } else success = targeted(action.verb, action.target, context);
       break;
-    case "wait": success = true; break;
-    case "chase": break;
+    case 'wait':
+      success = true;
+      break;
   }
-  if (survivor.x !== before.x || survivor.y !== before.y) survivor.stamina = Math.max(0, survivor.stamina - 2);
+  if (survivor.x !== before.x || survivor.y !== before.y)
+    survivor.stamina = Math.max(0, survivor.stamina - 2);
   else if (!context.realtime) survivor.stamina = Math.min(100, survivor.stamina + 3);
   survivor.updateVision(grid);
-  return success ? `Survivor: ${action.type === "targeted" || action.type === "item" ? action.verb : action.type}.` : "Action unavailable: check target, reach, or inventory.";
+  return success
+    ? `Survivor: ${action.type === 'targeted' || action.type === 'item' ? action.verb : action.type}.`
+    : 'Action unavailable: check target, reach, or inventory.';
 }

@@ -1,18 +1,29 @@
+<section class="guide" id="behavior-builder"><h2>Start with behavior, then learn SurvivorScript</h2>
+<p>Open Code, choose Create a survivor, and select Coward, Scavenger, Fighter, or Explorer in Behavior Builder. Custom starts with Explore. Change a rule, deploy, watch View, and return to adjust it. Draft edits only affect your survivor after you deploy.</p>
+<ol><li><strong>First rule:</strong> Add Rule. Choose Distance to ? nearest ? Zombie ? is at most ? 4 tiles. Choose Move away from ? nearest ? Zombie. Add OTHERWISE ? Explore.</li>
+<li><strong>Priority:</strong> Add another rule: Zombie distance at most 1 tile ? Attack nearest Zombie. Move it above the flee rule. Rules are checked from top to bottom, and the first match wins.</li>
+<li><strong>Needs:</strong> Choose Needs and health ? Hunger ? is above ? 70. Add Inventory contains ? Food. Match All conditions, then Eat ? Food. Higher hunger and thirst mean more urgent needs.</li>
+<li><strong>Targeting:</strong> Compare nearest, weakest, and strongest Zombie. Weakest and strongest are available for living targets. Distance and search range are measured in tiles.</li>
+<li><strong>Scavenging:</strong> Find ? Food approaches visible floor supplies or explores when none are visible. Pick up ? Food collects at the current position. Search ? Container interacts with an adjacent container; Move toward ? Container approaches it first. Searching does not automatically collect loot.</li>
+<li><strong>Modes:</strong> Add scavenging, then fleeing. The first mode is the default. Add Nearby count ? Zombie ? within 6 tiles ? is at least 3, then Change mode to ? Fleeing. Next add Current mode ? is exactly ? Fleeing, then Move away from ? nearest Zombie. Add a higher rule that changes back to Scavenging when count Zombie within 6 tiles is exactly 0, so the survivor can leave that mode.</li></ol>
+<p>Memory has four named places: Home, Target, Last zombie, and Last container. Remember your current position as Home, or remember a nearby container as Target. Return to Home travels there; Patrol alternates between the chosen remembered destination and Home.</p>
+<p>View generated SurvivorScript is optional. Switch to SurvivorScript whenever you want to type or paste rules. Mixed All/Any groups stay in the text editor so their meaning is preserved. Comments are preserved while switching views; editing a visual rule regenerates the script without comments.</p></section>
+
 <div class="page-heading"><p class="eyebrow">Getting started / 02</p><h1>Your first survivor program</h1><p>Write a rule. Watch a decision. Adapt your strategy.</p></div>
 <article class="guide"><section><h2>1. Connect and observe</h2><p>Open View and log in with your email and password. Use the dropdown to switch between your survivors and zombies. Check the selected entity status and use the grid key to read the map. The server keeps running while you observe.</p></section>
-<section><h2>2. Write a priority list</h2><p>Open the Code page and choose Create a survivor. Name it, write its survivor script and prepare its zombie behavior. You can save both scripts to your library before injecting it. The example below explains how a survivor program works. This script approaches visible closed doors, opens them, and explores the revealed interior. It only scavenges when inventory has space. Each condition has one action underneath it. The first matching rule wins.</p><pre><code>WHEN health &lt; 40 AND hasItem bandage
+<section><h2>2. Write a priority list</h2><p>Open the Code page and choose Create a survivor. Name it, write its survivor script and prepare its zombie behavior. Save the survivor script and zombie script independently using the controls in each section. Each starting behavior dropdown offers basic behaviors, Custom, and your saved scripts for that kind. Choosing a saved script only changes that section. Library saves do not deploy behavior. The example below explains how a survivor program works. This script approaches visible closed doors, opens them, and explores the revealed interior. It only scavenges when inventory has space. Each condition has one action underneath it. The first matching rule wins.</p><pre><code>WHEN health &lt; 40 AND hasItem bandage
     USE bandage
 
-WHEN zombieNearby 1
+WHEN count zombie 1 &gt; 0
     ATTACK zombie
 
-WHEN zombieNearby 6
+WHEN count zombie 6 &gt; 0
     MOVE_AWAY nearest zombie
 
-WHEN thirsty AND hasItem water
+WHEN thirst > 70 AND hasItem water
     USE water
 
-WHEN hungry AND hasItem food
+WHEN hunger > 70 AND hasItem food
     EAT food
 
 WHEN hasItem weapon AND NOT equipped weapon
@@ -21,13 +32,13 @@ WHEN hasItem weapon AND NOT equipped weapon
 WHEN itemsOnFloor AND inventorySpace
     PICK_UP items
 
-WHEN containerNearby AND inventorySpace
+WHEN count container 1 &gt; 0 AND inventorySpace
     SEARCH nearest container
 
-WHEN doorNearby
+WHEN distance nearest door &lt;= 1
     OPEN door
 
-WHEN containerNearby 8 AND inventorySpace
+WHEN count container 8 &gt; 0 AND inventorySpace
     MOVE_TO nearest container
 
 WHEN distance nearest door &gt; 1
@@ -35,13 +46,21 @@ WHEN distance nearest door &gt; 1
 
 OTHERWISE
     EXPLORE</code></pre></section>
-<section><h2>3. Deploy and observe</h2><p>Press Inject survivor to queue a new survivor at a random free location, or select an active entity and press Update behavior. Return to World view to observe it. When a survivor dies, it rises at its corpse using its zombie program; its scripts are archived in your library. Zombies cannot be injected directly. Movement continues between decisions at 1.0 tiles/second for survivors and 1.2 for zombies. New decisions can interrupt movement. A failed action still takes an update.</p></section>
+<section><h2>3. Deploy and observe</h2><p>Press Create survivor to queue a new survivor at a random free location, or select an active entity and press Deploy behavior. Return to World view to observe it. When a survivor dies, it rises at its corpse using its zombie program; its scripts are archived in your library. Zombies cannot be injected directly. Movement continues between decisions at 1.0 tiles/second for survivors and 1.2 for zombies. New decisions can interrupt movement. A failed action still takes an update.</p></section>
 <section><h2>4. Give needs a priority</h2><p>The starter script places these rules above exploration and scavenging. Your survivor needs to find and carry the matching items first.</p><pre><code>WHEN health &lt; 40 AND hasItem bandage
     USE bandage
 
-WHEN thirsty AND hasItem water
+WHEN thirst > 70 AND hasItem water
     USE water
 
-WHEN hungry AND hasItem food
+WHEN hunger > 70 AND hasItem food
     EAT food</code></pre><p>Use the Wiki to explore equipment, target selectors, memory, and Boolean conditions. Deployed scripts and world state persist on the server across browser refreshes and server restarts.</p></section>
+<section><h2>Keep a supply reserve</h2><p>Use itemCount to check how many supplies you carry, including equipped items. Place these rules above general scavenging. Numeric hunger and thirst comparisons let you choose exactly when to consume supplies.</p><pre><code>WHEN thirst &gt;= 80 AND hasItem water
+    USE water
+
+WHEN itemCount water &lt; 2 AND count water 8 &gt; 0 AND inventorySpace
+    MOVE_TO nearest water
+
+WHEN itemCount water &lt; 2 AND inventorySpace
+    FIND water</code></pre><p>For food or bandages, replace water with food or bandage and choose your desired count. Pick up supplies when you reach them using your PICK_UP rules.</p></section>
 <p><a class="button-link" href="#view">Open View</a> <a class="text-link" href="#wiki">Read the command reference &rarr;</a></p></article>

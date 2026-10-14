@@ -11,3 +11,10 @@ web-dist/
 .env.*
 !.env.example
 !client/.env.example
+
+# Browser verification artifacts.
+/test-results/
+/playwright-report/
+
+# Locally compiled Windows service host.
+/scripts/windows/build/

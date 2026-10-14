@@ -7,10 +7,17 @@ permissions:
   contents: read
 concurrency:
   group: pages
-  cancel-in-progress: true
+  cancel-in-progress: false
 jobs:
+  verify:
+    uses: ./.github/workflows/test.yml
   build:
+    needs: verify
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pages: read
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -18,15 +25,21 @@ jobs:
           node-version: 24
           cache: npm
       - run: npm ci
-      - name: Require the public API endpoint
+      - name: Configure GitHub Pages
+        id: pages
+        uses: actions/configure-pages@v5
+      - name: Verify the public API before publishing
+        run: node scripts/check-deployment.mjs --api-only
         env:
-          VITE_API_URL: ${{ vars.VITE_API_URL }}
-        run: node -e "const u = new URL(process.env.VITE_API_URL); if (u.protocol !== 'https:' || u.origin !== process.env.VITE_API_URL) throw new Error('Set VITE_API_URL to the HTTPS API origin, without a trailing slash');"
-      - run: npm run build:client
+          PUBLIC_API_ORIGIN: ${{ vars.VITE_API_URL }}
+          CLIENT_ORIGIN: ${{ steps.pages.outputs.origin }}
+      - name: Build the Pages client
+        run: npm run build:client && npm run check:pages
         env:
+          GITHUB_PAGES: 'true'
           VITE_API_URL: ${{ vars.VITE_API_URL }}
-          VITE_BASE_PATH: ${{ vars.VITE_BASE_PATH || './' }}
-      - uses: actions/upload-pages-artifact@v3
+          VITE_BASE_PATH: ${{ vars.VITE_BASE_PATH || format('{0}/', steps.pages.outputs.base_path) }}
+      - uses: actions/upload-pages-artifact@v4
         with:
           path: web-dist
   deploy:
@@ -39,7 +52,6 @@ jobs:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
-      - uses: actions/configure-pages@v5
       - name: Deploy
         id: deployment
         uses: actions/deploy-pages@v4

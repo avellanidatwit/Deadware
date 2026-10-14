@@ -1,53 +1,74 @@
+import type { DecisionTrace, RuleTrace } from '../language/trace.js';
 import { Survivor } from '../../entities/survivor.js';
-import type { SurvivorProgram, SurvivorAction } from "../language/types.js";
-import type { ScriptContext } from "./context.js";
-import { evaluateCondition } from "./conditionEvaluator.js";
-import { isMovement } from "../language/actions.js";
-import type { Condition } from "../language/types.js";
-import { refreshMemory } from "./targetResolver.js";
+import type { SurvivorProgram, SurvivorAction } from '../language/types.js';
+import type { ScriptContext } from './context.js';
+import { evaluateCondition } from './conditionEvaluator.js';
+import { isMovement } from '../language/actions.js';
+import { refreshMemory } from './targetResolver.js';
 
-/** Only positive conditions in the selected Boolean branch constrain CHASE. */
-function matchedSightRanges(condition: Condition, context: ScriptContext): number[] {
-  if (condition.type === "survivorNearby") return [condition.range ?? context.detectionRange ?? 5];
-  if (condition.type === "and") return condition.conditions.flatMap(part => matchedSightRanges(part, context));
-  if (condition.type === "or") {
-    const branch = condition.conditions.find(part => evaluateCondition(part, context));
-    return branch ? matchedSightRanges(branch, context) : [];
-  }
-  return [];
-}
 export function runSurvivorProgram(
   program: SurvivorProgram,
-  context: ScriptContext
+  context: ScriptContext,
+  trace?: DecisionTrace,
 ): SurvivorAction {
-  if (!context.survivor.isAlive()) return { type: "wait" };
+  if (trace) {
+    for (const key of Object.keys(trace)) delete (trace as unknown as Record<string, unknown>)[key];
+    trace.rules = [];
+  }
+  const selected = (action: SurvivorAction, ruleIndex?: number) => {
+    if (trace) {
+      trace.selectedAction = action;
+      trace.selectedRule = ruleIndex;
+    }
+    return action;
+  };
+  if (!context.survivor.isAlive()) {
+    if (trace) trace.failureReason = 'Actor is dead.';
+    return selected({ type: 'wait' });
+  }
+  if (!program.modes.includes(context.survivor.mode ?? ''))
+    context.survivor.mode = program.modes[0];
+  if (trace) trace.mode = context.survivor.mode;
   refreshMemory(context);
   // Rules execute from top to bottom.
   // First matching rule wins.
 
-  for (const rule of program.rules) {
-    // Skip impossible pickups so a blocked extra weapon cannot trap a priority script.
-    if (context.survivor instanceof Survivor &&
-        (rule.action.type === 'pickUpItems' || rule.action.type === 'item' && rule.action.verb === 'PICK_UP') &&
-        !context.survivor.canPickUpItems(context.grid, rule.action.type === 'item' ? rule.action.itemType : undefined)) continue;
-    const movement = isMovement(rule.action);
-    if (movement && (context.canMove === false || "stamina" in context.survivor && context.survivor.stamina < 2)) continue;
+  for (const [index, rule] of program.rules.entries()) {
+    const entry: RuleTrace | undefined = trace
+      ? { ruleIndex: index + 1, actionSource: rule.actionSource }
+      : undefined;
+    if (entry) trace!.rules.push(entry);
+    // Preserve eligibility behavior: these rules skip before evaluating conditions.
     if (
-      evaluateCondition(
-        rule.condition,
-        context
+      context.survivor instanceof Survivor &&
+      (rule.action.type === 'pickUpItems' ||
+        (rule.action.type === 'item' && rule.action.verb === 'PICK_UP')) &&
+      !context.survivor.canPickUpItems(
+        context.grid,
+        rule.action.type === 'item' ? rule.action.itemType : undefined,
       )
     ) {
-      // Use the matched detection radius for this chase only, without changing the entity default.
-      const sightRules = matchedSightRanges(rule.condition, context);
-      if (rule.action.type === "chase" && sightRules.length > 0) {
-        return { ...rule.action, range: Math.min(...sightRules) };
-      }
-      return rule.action;
+      if (entry) entry.skippedReason = 'No eligible floor items or inventory capacity.';
+      continue;
     }
+    if (
+      isMovement(rule.action) &&
+      (context.canMove === false || ('stamina' in context.survivor && context.survivor.stamina < 2))
+    ) {
+      if (entry) entry.skippedReason = 'Movement unavailable or insufficient stamina.';
+      continue;
+    }
+    const matched = evaluateCondition(
+      rule.condition,
+      context,
+      entry
+        ? (condition) => {
+            entry.condition = condition;
+          }
+        : undefined,
+    );
+    if (entry) entry.matched = matched;
+    if (matched) return selected(rule.action, index + 1);
   }
-
-  return {
-    type: "wait",
-  };
+  return selected({ type: 'wait' });
 }

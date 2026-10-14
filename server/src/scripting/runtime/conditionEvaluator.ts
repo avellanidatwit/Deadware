@@ -1,97 +1,125 @@
-import type { Condition, ComparisonOperator } from "../language/types.js";
-import type { ScriptContext } from "./context.js";
-import { searchTargets } from "../../world/perception.js";
-import { spatialDistance } from "../../world/perception.js";
-import { resolveTargets } from "./targetResolver.js";
-import { Survivor } from "../../entities/survivor.js";
+import { itemMatchesCategory } from '../../entities/item.js';
+import type { Condition, ComparisonOperator } from '../language/types.js';
+import type { ConditionTrace } from '../language/trace.js';
+import type { ScriptContext } from './context.js';
+import { spatialDistance } from '../../world/perception.js';
+import { resolveTargets } from './targetResolver.js';
+import { Survivor } from '../../entities/survivor.js';
+
+/** Tracing observes the same evaluation; no extra target queries or hidden branches. */
 export function evaluateCondition(
   condition: Condition,
-  context: ScriptContext
-): boolean {
-  switch (condition.type) {
-    case "or": return condition.conditions.some(part => evaluateCondition(part, context));
-    case "not": return !evaluateCondition(condition.condition, context);
-    case "stat": return context.survivor instanceof Survivor && compareNumbers(context.survivor[condition.stat], condition.operator, condition.value);
-    case "hasItem": return context.survivor instanceof Survivor && context.survivor.inventory.some(item => item.type === condition.itemType);
-    case "equipped": return context.survivor instanceof Survivor && (condition.itemType === "armor" ? !!context.survivor.equippedArmor : context.survivor.equippedItem?.type === condition.itemType);
-    case "remembered": return context.survivor instanceof Survivor && context.survivor.memory[condition.slot] !== undefined;
-    case "count": return compareNumbers(resolveTargets(condition.target, context).length, condition.operator, condition.value);
-    case "visible": return resolveTargets(condition.target, context).length > 0;
-    case "distance": {
-      const target = resolveTargets(condition.target, context)[0];
-      return target !== undefined && compareNumbers(spatialDistance(context.survivor, target), condition.operator, condition.value);
-    }
-    case "and":
-      return condition.conditions.every(part => evaluateCondition(part, context));
-    case "nearbydoor":
-      return "findNearbyDoors" in context.survivor && context.survivor.findNearbyDoors(context.grid).length > 0;
-    case "inventorySpace":
-      return "inventory" in context.survivor && context.survivor.inventory.length < context.survivor.inventoryCapacity;
-    case "inventoryFull":
-      return "inventory" in context.survivor && context.survivor.inventory.length >= context.survivor.inventoryCapacity;
-    case "itemsOnFloor":
-      return "lookAtFloor" in context.survivor && context.survivor.lookAtFloor(context.grid).length > 0;
-    case "containerNearby":
-      return "findContainers" in context.survivor && context.survivor.findContainers(context.grid, condition.range ?? 1)
-        .some(container => container.contents.length > 0);
-    case "always":
-      return true;
-
-    case "zombieNearby":
-      return isZombieNearby(context, condition.range ?? 5);
-
-    case "survivorNearby":
-      return resolveTargets({ type: "survivor", selector: "nearest", range: condition.range ?? context.detectionRange ?? 5 }, context).length > 0;
-
-    case "healthComparison":
-      return compareNumbers(
-        context.survivor.health,
-        condition.operator,
-        condition.value
-      );
-  }
-}
-
-// ======================================================
-// ZOMBIE DETECTION
-// ======================================================
-
-function isZombieNearby(
   context: ScriptContext,
-  range = 5
+  report?: (trace: ConditionTrace) => void,
 ): boolean {
-  return searchTargets(context.grid, context.survivor, context.zombies, {
-    range: "sightRange" in context.survivor ? Math.min(range, context.survivor.sightRange) : range,
-    predicate: zombie => zombie.id !== context.survivor.id && zombie.isAlive(),
-  }).length > 0;
+  const actor = context.survivor;
+  const human = actor instanceof Survivor ? actor : undefined;
+  let actual: number | string | boolean | null | undefined;
+  let matched = false;
+  const children: ConditionTrace[] = [];
+  const child = (part: Condition) =>
+    evaluateCondition(part, context, report ? (trace) => children.push(trace) : undefined);
+  switch (condition.type) {
+    case 'and':
+      matched = condition.conditions.every(child);
+      break;
+    case 'or':
+      matched = condition.conditions.some(child);
+      break;
+    case 'not':
+      matched = !child(condition.condition);
+      break;
+    case 'stat':
+      actual = condition.stat === 'health' ? actor.health : (human?.[condition.stat] ?? null);
+      matched = actual !== null && compareNumbers(actual, condition.operator, condition.value);
+      break;
+    case 'mode':
+      actual = actor.mode ?? null;
+      matched =
+        condition.operator === '==' ? actual === condition.value : actual !== condition.value;
+      break;
+    case 'itemCount':
+      actual = human?.getItemCount(condition.itemType) ?? null;
+      matched = actual !== null && compareNumbers(actual, condition.operator, condition.value);
+      break;
+    case 'hasItem':
+      actual = human?.getItemCount(condition.itemType) ?? 0;
+      matched = actual > 0;
+      break;
+    case 'equipped':
+      actual =
+        !!human &&
+        (condition.itemType === 'armor'
+          ? !!human.equippedArmor
+          : !!human.equippedItem && itemMatchesCategory(human.equippedItem, condition.itemType));
+      matched = actual;
+      break;
+    case 'remembered':
+      actual = human?.memory[condition.slot] !== undefined;
+      matched = actual;
+      break;
+    case 'count':
+      actual = resolveTargets(condition.target, context).length;
+      matched = compareNumbers(actual, condition.operator, condition.value);
+      break;
+    case 'visible':
+      actual = resolveTargets(condition.target, context).length > 0;
+      matched = actual;
+      break;
+    case 'distance': {
+      const target = resolveTargets(condition.target, context)[0];
+      actual = target ? spatialDistance(actor, target) : null;
+      matched = actual !== null && compareNumbers(actual, condition.operator, condition.value);
+      break;
+    }
+    case 'inventorySpace':
+      actual = human?.inventory.length ?? null;
+      matched = actual !== null && actual < human!.inventoryCapacity;
+      break;
+    case 'inventoryFull':
+      actual = human?.inventory.length ?? null;
+      matched = actual !== null && actual >= human!.inventoryCapacity;
+      break;
+    case 'itemsOnFloor':
+      actual = human?.lookAtFloor(context.grid).length ?? 0;
+      matched = actual > 0;
+      break;
+    case 'always':
+      actual = true;
+      matched = true;
+      break;
+  }
+  report?.({
+    condition,
+    matched,
+    ...(actual === undefined ? {} : { actual }),
+    ...(children.length ? { children } : {}),
+  });
+  return matched;
 }
 
 // ======================================================
 // COMPARISON
 // ======================================================
 
-export function compareNumbers(
-  left: number,
-  operator: ComparisonOperator,
-  right: number
-): boolean {
+export function compareNumbers(left: number, operator: ComparisonOperator, right: number): boolean {
   switch (operator) {
-    case "<":
+    case '<':
       return left < right;
 
-    case ">":
+    case '>':
       return left > right;
 
-    case "<=":
+    case '<=':
       return left <= right;
 
-    case ">=":
+    case '>=':
       return left >= right;
 
-    case "==":
+    case '==':
       return left === right;
 
-    case "!=":
+    case '!=':
       return left !== right;
   }
 }

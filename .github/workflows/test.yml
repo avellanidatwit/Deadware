@@ -1,5 +1,9 @@
 name: Test
-on: [push, pull_request]
+on:
+  push:
+    branches-ignore: [main]
+  pull_request:
+  workflow_call:
 permissions:
   contents: read
 jobs:
@@ -16,10 +20,21 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y postgresql
           sudo systemctl start postgresql
-          sudo -u postgres psql -v ON_ERROR_STOP=1 -c "CREATE ROLE deadware_test LOGIN PASSWORD 'test-password';"
+          sudo -u postgres psql -v ON_ERROR_STOP=1 -c "CREATE ROLE deadware_test LOGIN CREATEDB CREATEROLE PASSWORD 'test-password';"
           sudo -u postgres createdb --owner=deadware_test deadware_test
       - run: npm ci
+      - run: npm run format:check
       - run: npm test
         env:
           TEST_DATABASE_URL: postgres://deadware_test:test-password@localhost:5432/deadware_test
-      - run: npm run build:client
+      - name: Build the client for a Pages repository path
+        run: npm run build:client && npm run check:pages
+        env:
+          GITHUB_PAGES: 'true'
+          VITE_API_URL: https://api.example.com
+          VITE_BASE_PATH: /Deadware/
+
+      - name: Install browser test runtime
+        run: npx playwright install --with-deps chromium
+      - name: Verify browser interactions and isometric rendering
+        run: npm run test:browser

@@ -2,16 +2,16 @@
 export const survivorCode = `WHEN health < 40 AND hasItem bandage
     USE bandage
 
-WHEN zombieNearby 1
+WHEN count zombie 1 > 0
     ATTACK zombie
 
-WHEN zombieNearby 6
+WHEN count zombie 6 > 0
     MOVE_AWAY nearest zombie
 
-WHEN thirsty AND hasItem water
+WHEN thirst > 70 AND hasItem water
     USE water
 
-WHEN hungry AND hasItem food
+WHEN hunger > 70 AND hasItem food
     EAT food
 
 WHEN hasItem weapon AND NOT equipped weapon
@@ -20,13 +20,13 @@ WHEN hasItem weapon AND NOT equipped weapon
 WHEN itemsOnFloor AND inventorySpace
     PICK_UP items
 
-WHEN containerNearby AND inventorySpace
+WHEN count container 1 > 0 AND inventorySpace
     SEARCH nearest container
 
-WHEN doorNearby
+WHEN distance nearest door <= 1
     OPEN door
 
-WHEN containerNearby 8 AND inventorySpace
+WHEN count container 8 > 0 AND inventorySpace
     MOVE_TO nearest container
 
 WHEN distance nearest door > 1

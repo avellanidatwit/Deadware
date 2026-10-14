@@ -1,9 +1,10 @@
 import type { Motion } from '../simulation/movement.js';
-import type { GridEntity } from "../world/grid.js";
+import type { GridEntity } from '../world/grid.js';
 
 export class Zombie implements GridEntity {
-  public readonly symbol = "Z";
+  public readonly symbol = 'Z';
 
+  public mode?: string;
   public motion?: Motion;
   public speed = 1.2;
   public radius = 0.22;
@@ -17,15 +18,15 @@ export class Zombie implements GridEntity {
     public id: string,
     public x: number,
     public y: number,
-    public program = 
-`WHEN survivorNearby 1
+    public program = `WHEN count survivor 1 > 0
     ATTACK survivor
 
-WHEN survivorNearby
-    CHASE survivor
+WHEN count survivor 5 > 0
+    MOVE_TO nearest survivor
 
 OTHERWISE
-    WANDER`) {}
+    EXPLORE`,
+  ) {}
 
   takeDamage(amount: number): void {
     this.health -= amount;
